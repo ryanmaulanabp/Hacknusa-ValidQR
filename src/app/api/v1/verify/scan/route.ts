@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     let scannedName = (body.name || body.merchantName || body.scannedName || '').toString().toUpperCase().trim();
     const userLat = body.latitude ?? body.userLat ?? null;
     const userLon = body.longitude ?? body.userLon ?? null;
+    const userAccuracy = body.accuracy != null && !isNaN(Number(body.accuracy)) ? Number(body.accuracy) : null;
     const gpsAvailable = userLat != null && userLon != null && !isNaN(userLat) && !isNaN(userLon);
     const rawPayload = body.rawPayload || body.payload;
 
@@ -84,61 +85,71 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────────────────────────────────
     // LAYER 1 & GEOFENCE GUARD:
     // If distance exceeds radius -> IMMEDIATE HARD BLOCK (RED)
+    // Exception: If distance is within device's reported GPS uncertainty margin (indoor/weak signal),
+    // handle gracefully as SOFT_WARNING (YELLOW) rather than falsely accusing of an overlay attack.
     // ────────────────────────────────────────────────────────────────────────
+    const isWithinAccuracyBuffer =
+      userAccuracy !== null &&
+      userAccuracy > radiusMeters &&
+      distanceMeters !== null &&
+      distanceMeters <= Math.max(radiusMeters + userAccuracy, 50);
+
     if (gpsAvailable && (locationCheck === 'MISMATCH' || (distanceMeters !== null && distanceMeters > radiusMeters))) {
-      console.warn(`[ValidQR] 🚨 GEOFENCE BREACH: Distance ${distanceMeters}m > ${radiusMeters}m -> BLOCKED`);
+      if (!isWithinAccuracyBuffer) {
+        console.warn(`[ValidQR] 🚨 GEOFENCE BREACH: Distance ${distanceMeters}m > ${radiusMeters}m -> BLOCKED`);
 
-      // Trigger WhatsApp Alert
-      sendFraudAlert({
-        nmid,
-        suspectedMerchantName: scannedName || registeredName,
-        buyerLocation: { latitude: Number(userLat), longitude: Number(userLon) },
-        timestamp: new Date().toISOString(),
-        distanceMeters: distanceMeters ?? undefined,
-        reason: 'GEOFENCE_LOCATION_MISMATCH',
-        targetPhone: primaryMerchant.wa_number || undefined,
-      }).catch(console.error);
+        // Trigger WhatsApp Alert
+        sendFraudAlert({
+          nmid,
+          suspectedMerchantName: scannedName || registeredName,
+          buyerLocation: { latitude: Number(userLat), longitude: Number(userLon) },
+          timestamp: new Date().toISOString(),
+          distanceMeters: distanceMeters ?? undefined,
+          reason: 'GEOFENCE_LOCATION_MISMATCH',
+          targetPhone: primaryMerchant.wa_number || undefined,
+        }).catch(console.error);
 
-      // Log incident
-      const incident = await logIncident({
-        nmid_scanned: nmid,
-        merchant_name: scannedName || registeredName,
-        status: 'BLOCKED',
-        color: 'RED',
-        reason: 'LOCATION_MISMATCH',
-        fuzzy_score: fuzzyScore,
-        latitude: Number(userLat),
-        longitude: Number(userLon),
-        distance_meters: distanceMeters ?? undefined,
-        gps_available: true,
-        raw_payload: rawPayload || undefined,
-      });
+        // Log incident
+        const incident = await logIncident({
+          nmid_scanned: nmid,
+          merchant_name: scannedName || registeredName,
+          status: 'BLOCKED',
+          color: 'RED',
+          reason: 'LOCATION_MISMATCH',
+          fuzzy_score: fuzzyScore,
+          latitude: Number(userLat),
+          longitude: Number(userLon),
+          distance_meters: distanceMeters ?? undefined,
+          gps_available: true,
+          raw_payload: rawPayload || undefined,
+        });
 
-      const response: ScanResponse = {
-        status: 'BLOCKED',
-        color: 'RED',
-        message: 'Lokasi Anda tidak sesuai dengan merchant terdaftar. Kemungkinan overlay attack.',
-        reason: 'LOCATION_MISMATCH',
-        nmid,
-        nmid_valid: true,
-        matched_name: registeredName,
-        merchant_city: primaryMerchant.city,
-        location_check: 'MISMATCH',
-        distance_meters: distanceMeters,
-        duration_seconds: 1,
-        calculation_method: 'HAVERSINE',
-        geofence_radius: radiusMeters,
-        fuzzy_score: fuzzyScore,
-        fuzzy_algorithm: 'levenshtein_hybrid',
-        scanned_name: scannedName,
-        auto_registered: autoRegistered,
-        gps_checked: true,
-        conflict_count: merchants.length,
-        conflict_names: merchants.map(m => ({ id: m.id, name: m.name })),
-        incident_id: incident.id,
-      };
+        const response: ScanResponse = {
+          status: 'BLOCKED',
+          color: 'RED',
+          message: 'Lokasi Anda tidak sesuai dengan merchant terdaftar. Kemungkinan overlay attack.',
+          reason: 'LOCATION_MISMATCH',
+          nmid,
+          nmid_valid: true,
+          matched_name: registeredName,
+          merchant_city: primaryMerchant.city,
+          location_check: 'MISMATCH',
+          distance_meters: distanceMeters,
+          duration_seconds: 1,
+          calculation_method: 'HAVERSINE',
+          geofence_radius: radiusMeters,
+          fuzzy_score: fuzzyScore,
+          fuzzy_algorithm: 'levenshtein_hybrid',
+          scanned_name: scannedName,
+          auto_registered: autoRegistered,
+          gps_checked: true,
+          conflict_count: merchants.length,
+          conflict_names: merchants.map(m => ({ id: m.id, name: m.name })),
+          incident_id: incident.id,
+        };
 
-      return NextResponse.json(response);
+        return NextResponse.json(response);
+      }
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -149,7 +160,12 @@ export async function POST(req: NextRequest) {
     let finalReason = 'ALL_CLEAR';
     let finalMessage = 'Merchant terdaftar resmi dan lokasi sesuai.';
 
-    if (merchants.length > 1) {
+    if (isWithinAccuracyBuffer && distanceMeters !== null && distanceMeters > radiusMeters) {
+      finalStatus = 'SOFT_WARNING';
+      finalColor = 'YELLOW';
+      finalReason = 'GPS_ACCURACY_LOW';
+      finalMessage = `Sinyal GPS perangkat indoor (±${userAccuracy}m, selisih ${distanceMeters}m). Pastikan Anda berada langsung di kasir toko ${registeredName}.`;
+    } else if (merchants.length > 1) {
       finalStatus = 'REBRAND_WARNING';
       finalColor = 'YELLOW';
       finalReason = 'REBRAND_DETECTED';

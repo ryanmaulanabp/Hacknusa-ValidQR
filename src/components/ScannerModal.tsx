@@ -18,6 +18,7 @@ import {
   SwitchCamera,
   ChevronDown,
   ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
@@ -70,6 +71,20 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     if (useRealGps && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
       setGpsStatus('Mencari sinyal GPS satelit...');
 
+      // Immediate hardware kickstart to avoid delay
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = Math.round(pos.coords.accuracy);
+          setGpsLocation({ lat, lon });
+          setGpsAccuracy(acc);
+          setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+      );
+
       watchId = navigator.geolocation.watchPosition(
         pos => {
           const lat = pos.coords.latitude;
@@ -92,10 +107,12 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           timeout: 10000,
         }
       );
-    } else {
-      setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
-      setGpsStatus('Gedung Selaru (-6.974021, 107.630342)');
-      setGpsAccuracy(0);
+    } else if (!useRealGps) {
+      if (!gpsLocation) {
+        setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
+        setGpsStatus('Gedung Selaru (-6.974021, 107.630342)');
+        setGpsAccuracy(0);
+      }
     }
 
     return () => {
@@ -359,6 +376,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
         rawPayload: rawCode,
         latitude: gpsLocation?.lat,
         longitude: gpsLocation?.lon,
+        accuracy: gpsAccuracy,
       };
 
       const res = await fetch('/api/v1/verify/scan', {
@@ -452,13 +470,17 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold">{t('scan_title')}</h2>
                 {useRealGps && gpsAccuracy !== null ? (
-                  <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    ±{gpsAccuracy}m Akurat
+                  <span className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                    gpsAccuracy <= 20
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${gpsAccuracy <= 20 ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                    ±{gpsAccuracy}m {gpsAccuracy <= 20 ? 'Akurat' : 'Lemah'}
                   </span>
                 ) : (
                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    Selaru Lock
+                    {useRealGps ? 'GPS Lock' : 'Titik Peta'}
                   </span>
                 )}
               </div>
@@ -559,6 +581,22 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
 
         {/* Bottom Action Sheet: Gallery & Presets */}
         <div className="px-5 py-4 bg-[#101424] border-t border-white/10 z-20 space-y-3">
+          {/* Indoor GPS Warning Banner */}
+          {useRealGps && gpsAccuracy !== null && gpsAccuracy > 25 && !showMapPicker && (
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-[11px] text-amber-200">
+              <div className="flex items-center gap-1.5 line-clamp-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>GPS indoor (±{gpsAccuracy}m). Set titik di <strong>Peta</strong> untuk presisi 1m.</span>
+              </div>
+              <button
+                onClick={() => setShowMapPicker(true)}
+                className="px-2 py-0.5 rounded-lg bg-amber-500/30 hover:bg-amber-500/50 text-amber-300 font-bold text-[10px] shrink-0 ml-1.5"
+              >
+                Peta
+              </button>
+            </div>
+          )}
+
           {/* Upload Button & GPS Toggle & Map Picker */}
           <div className="flex items-center justify-between gap-2">
             <input
@@ -622,10 +660,10 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                 onChange={(lat, lon) => {
                   setUseRealGps(false);
                   setGpsLocation({ lat, lon });
-                  setGpsAccuracy(0);
+                  setGpsAccuracy(1);
                   setGpsStatus(`Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
                 }}
-                height="190px"
+                height="250px"
                 geofenceRadius={15}
                 merchantName="Titik Scan Pengguna"
               />
