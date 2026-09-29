@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -15,8 +15,11 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle,
+  AlertCircle,
   Loader2,
   X,
+  Compass,
+  Radio,
 } from 'lucide-react';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
 
@@ -41,7 +44,7 @@ export default function LocationPickerMap({
   latitude,
   longitude,
   onChange,
-  height = '320px',
+  height = '330px',
   geofenceRadius = 15,
   merchantName = 'Lokasi Terpilih',
   readOnly = false,
@@ -52,11 +55,14 @@ export default function LocationPickerMap({
   const geofenceCircleRef = useRef<L.Circle | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   // GPS & Accuracy State
   const [isLocating, setIsLocating] = useState(false);
+  const [isTrackingLive, setIsTrackingLive] = useState(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [gpsStatusText, setGpsStatusText] = useState<string | null>(null);
+  const [addressText, setAddressText] = useState<string>('Memuat alamat lokasi...');
 
   // Map Tile Style State: 'osm' | 'satellite'
   const [mapLayer, setMapLayer] = useState<'osm' | 'satellite'>('osm');
@@ -67,21 +73,24 @@ export default function LocationPickerMap({
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
 
+  // D-Pad Step: 1m vs 5m
+  const [nudgeStep, setNudgeStep] = useState<number>(1);
+
   // Custom Neon / Indigo Map Marker Icon (DivIcon avoids broken PNG assets)
   const createMarkerIcon = (color = '#6C5CE7') => {
     return L.divIcon({
       className: 'custom-leaflet-pin',
       html: `
-        <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
+        <div style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
           <div style="
             position: absolute;
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             background: ${color};
             border: 2.5px solid #FFFFFF;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
-            box-shadow: 0 4px 14px rgba(108, 92, 231, 0.6);
+            box-shadow: 0 4px 16px rgba(108, 92, 231, 0.65);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -96,11 +105,66 @@ export default function LocationPickerMap({
           "></div>
         </div>
       `,
-      iconSize: [34, 34],
-      iconAnchor: [17, 34],
-      popupAnchor: [0, -34],
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -36],
     });
   };
+
+  // Reverse Geocoding Helper (Debounced)
+  const reverseGeocodeTimer = useRef<NodeJS.Timeout | null>(null);
+  const fetchAddress = (lat: number, lon: number) => {
+    if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current);
+    reverseGeocodeTimer.current = setTimeout(async () => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'id,en' } });
+        const data = await res.json();
+        if (data && data.display_name) {
+          setAddressText(data.display_name);
+        } else {
+          setAddressText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+        }
+      } catch {
+        setAddressText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+      }
+    }, 400);
+  };
+
+  // Update position helper
+  const updatePosition = useCallback(
+    (lat: number, lon: number, customAccuracy?: number) => {
+      const fixedLat = parseFloat(lat.toFixed(7));
+      const fixedLon = parseFloat(lon.toFixed(7));
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([fixedLat, fixedLon]);
+      }
+      if (geofenceCircleRef.current) {
+        geofenceCircleRef.current.setLatLng([fixedLat, fixedLon]);
+      }
+
+      // Update or clear accuracy halo
+      if (customAccuracy !== undefined && mapRef.current) {
+        if (accuracyCircleRef.current) {
+          accuracyCircleRef.current.setLatLng([fixedLat, fixedLon]).setRadius(customAccuracy);
+        } else {
+          accuracyCircleRef.current = L.circle([fixedLat, fixedLon], {
+            radius: customAccuracy,
+            color: '#00CEC9',
+            fillColor: '#00CEC9',
+            fillOpacity: 0.15,
+            weight: 1.5,
+            dashArray: '3, 3',
+          }).addTo(mapRef.current);
+        }
+      }
+
+      fetchAddress(fixedLat, fixedLon);
+      onChange(fixedLat, fixedLon);
+    },
+    [onChange]
+  );
 
   // Initialize Map
   useEffect(() => {
@@ -110,7 +174,7 @@ export default function LocationPickerMap({
     const initialLat = isNaN(latitude) ? SELARU_LAT : latitude;
     const initialLon = isNaN(longitude) ? SELARU_LON : longitude;
 
-    // Create Map with high zoom allowance
+    // Create Map with high zoom allowance (up to 20 for meter-level precision)
     const map = L.map(containerRef.current, {
       center: [initialLat, initialLon],
       zoom: 18,
@@ -146,7 +210,10 @@ export default function LocationPickerMap({
     }).addTo(map);
     geofenceCircleRef.current = geofenceCircle;
 
-    // Map Click Listener
+    // Fetch initial address
+    fetchAddress(initialLat, initialLon);
+
+    // Map Click Listener: Set position anywhere by clicking
     if (!readOnly) {
       map.on('click', (e: L.LeafletMouseEvent) => {
         const { lat, lng } = e.latlng;
@@ -166,6 +233,9 @@ export default function LocationPickerMap({
 
     return () => {
       clearTimeout(timer);
+      if (watchIdRef.current !== null && typeof navigator !== 'undefined') {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -215,52 +285,27 @@ export default function LocationPickerMap({
     }
   }, [latitude, longitude]);
 
-  // Update position helper
-  const updatePosition = (lat: number, lon: number, customAccuracy?: number) => {
-    const fixedLat = parseFloat(lat.toFixed(6));
-    const fixedLon = parseFloat(lon.toFixed(6));
-
-    if (markerRef.current) {
-      markerRef.current.setLatLng([fixedLat, fixedLon]);
-    }
-    if (geofenceCircleRef.current) {
-      geofenceCircleRef.current.setLatLng([fixedLat, fixedLon]);
-    }
-
-    // Update or clear accuracy halo
-    if (customAccuracy !== undefined && mapRef.current) {
-      if (accuracyCircleRef.current) {
-        accuracyCircleRef.current.setLatLng([fixedLat, fixedLon]).setRadius(customAccuracy);
-      } else {
-        accuracyCircleRef.current = L.circle([fixedLat, fixedLon], {
-          radius: customAccuracy,
-          color: '#00CEC9',
-          fillColor: '#00CEC9',
-          fillOpacity: 0.15,
-          weight: 1.5,
-          dashArray: '3, 3',
-        }).addTo(mapRef.current);
-      }
-    }
-
-    onChange(fixedLat, fixedLon);
-  };
-
   // ── High-Precision Multi-Sample Satellite GPS Locator ───────────────
-  const handleGetCurrentLocation = () => {
+  const startHighPrecisionGps = (continuous = false) => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
       alert('Geolokasi tidak didukung oleh browser ini.');
       return;
     }
 
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+
     setIsLocating(true);
-    setGpsStatusText('Menghubungkan sensor satelit GPS...');
+    if (continuous) setIsTrackingLive(true);
+    setGpsStatusText('Mengunci sinyal satelit GNSS/GPS...');
 
     let bestAcc = 999999;
     let sampleCount = 0;
     const maxSamples = 8;
 
-    // Force continuous fresh satellite readings with maximumAge: 0
+    // maximumAge: 0 forces direct hardware satellite readings without stale cache
     const watchId = navigator.geolocation.watchPosition(
       pos => {
         sampleCount++;
@@ -270,7 +315,7 @@ export default function LocationPickerMap({
 
         setGpsAccuracy(acc);
 
-        if (acc <= bestAcc) {
+        if (acc <= bestAcc || continuous) {
           bestAcc = acc;
           updatePosition(lat, lon, acc);
           if (mapRef.current) {
@@ -280,38 +325,55 @@ export default function LocationPickerMap({
 
         setGpsStatusText(`Akurasi GPS: ±${acc}m`);
 
-        // If satellite precision reached <= 12m or enough samples gathered
-        if (acc <= 12 || sampleCount >= maxSamples) {
+        // If high precision <= 10m is achieved and not in continuous mode, finish
+        if (!continuous && (acc <= 10 || sampleCount >= maxSamples)) {
           navigator.geolocation.clearWatch(watchId);
+          watchIdRef.current = null;
           setIsLocating(false);
-          setGpsStatusText(`GPS Terkunci: ±${acc}m Presisi`);
+          setGpsStatusText(`GPS Terkunci: ±${acc}m`);
         }
       },
       err => {
-        console.warn('GPS watch error:', err);
+        console.warn('GPS error:', err);
         setIsLocating(false);
-        setGpsStatusText(`Gagal: ${err.message}`);
-        navigator.geolocation.clearWatch(watchId);
+        setIsTrackingLive(false);
+        setGpsStatusText(`GPS Error: ${err.message}`);
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+        }
       },
       {
         enableHighAccuracy: true,
         maximumAge: 0,
-        timeout: 12000,
+        timeout: 15000,
       }
     );
 
-    // Timeout safety net after 10s
-    setTimeout(() => {
-      navigator.geolocation.clearWatch(watchId);
-      setIsLocating(false);
-    }, 10000);
+    watchIdRef.current = watchId;
+
+    if (!continuous) {
+      setTimeout(() => {
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+          watchIdRef.current = null;
+          setIsLocating(false);
+        }
+      }, 10000);
+    }
+  };
+
+  const stopTracking = () => {
+    if (watchIdRef.current !== null && typeof navigator !== 'undefined') {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsTrackingLive(false);
+    setIsLocating(false);
+    setGpsStatusText(null);
   };
 
   // ── Exact 1-Meter Geodesic Nudge (Presisi 1 Meter Matematis) ────────
-  // 1 meter latitude = ~0.00000899 derajat
-  // 1 meter longitude = 0.00000899 / cos(lat) derajat
-  const [nudgeStep, setNudgeStep] = useState<number>(1); // Default 1 meter!
-
   const nudgeMeter = (metersNorth: number, metersEast: number) => {
     const latDelta = metersNorth * 0.00000899;
     const cosLat = Math.cos((latitude * Math.PI) / 180);
@@ -335,7 +397,7 @@ export default function LocationPickerMap({
     try {
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
         searchQuery.trim()
-      )}&limit=5&countrycodes=id`;
+      )}&limit=6&countrycodes=id`;
       const res = await fetch(url, {
         headers: { 'Accept-Language': 'id,en' },
       });
@@ -370,7 +432,7 @@ export default function LocationPickerMap({
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cari gedung / jalan (misal: Telkom University, Buah Batu)..."
+              placeholder="Cari gedung / jalan / alamat toko..."
               className="w-full pl-8 pr-7 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 shadow-inner"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -403,10 +465,25 @@ export default function LocationPickerMap({
             <span className="hidden sm:inline">{mapLayer === 'satellite' ? 'Satelit' : 'Jalan'}</span>
           </button>
 
+          {/* Live Continuous Tracking Toggle */}
+          <button
+            type="button"
+            onClick={() => (isTrackingLive ? stopTracking() : startHighPrecisionGps(true))}
+            className={`px-2.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+              isTrackingLive
+                ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-emerald-500/20'
+                : 'bg-white/10 hover:bg-white/15 text-slate-300 border-white/10'
+            }`}
+            title="Lacak posisi GPS secara terus menerus"
+          >
+            <Radio className={`w-3.5 h-3.5 ${isTrackingLive ? 'animate-pulse text-emerald-400' : ''}`} />
+            <span className="hidden sm:inline">{isTrackingLive ? 'Live Track ON' : 'Live Track'}</span>
+          </button>
+
           {/* High-Accuracy GPS Locator Button */}
           <button
             type="button"
-            onClick={handleGetCurrentLocation}
+            onClick={() => startHighPrecisionGps(false)}
             disabled={isLocating}
             className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
             title="Kunci Titik GPS Akurat dari Satelit HP Anda"
@@ -414,6 +491,15 @@ export default function LocationPickerMap({
             <Navigation className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
             <span>{isLocating ? 'Kunci...' : 'GPS Saya'}</span>
           </button>
+        </div>
+
+        {/* Live Reverse Geocoded Address Box */}
+        <div className="px-3 py-1.5 rounded-xl bg-[#12162A] border border-white/10 flex items-start gap-2 text-[11px] text-slate-300">
+          <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-semibold text-white">Alamat Pin Terpilih: </span>
+            <span className="text-slate-300">{addressText}</span>
+          </div>
         </div>
 
         {/* Search Results Dropdown */}
@@ -439,7 +525,7 @@ export default function LocationPickerMap({
                 ))
               ) : (
                 <div className="p-3 text-center text-xs text-slate-400">
-                  Lokasi tidak ditemukan. Coba ketik nama jalan atau kota.
+                  Lokasi tidak ditemukan. Coba ketik nama jalan, gedung, atau kelurahan.
                 </div>
               )}
             </div>
@@ -553,7 +639,7 @@ export default function LocationPickerMap({
 
       {/* Preset Buttons Helper Bar */}
       <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
-        <span>Geser pin atau gunakan D-Pad di pojok kanan untuk akurasi meteran</span>
+        <span>Klik di mana saja pada peta atau cari alamat untuk menempatkan pin</span>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
