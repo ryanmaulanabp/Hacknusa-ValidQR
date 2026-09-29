@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Merchant } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
+import StickerModal from '@/components/StickerModal';
 import {
   Store,
   ArrowLeft,
@@ -14,10 +16,22 @@ import {
   CheckCircle,
   MapPin,
   RefreshCw,
-  ExternalLink,
-  ShieldAlert,
+  Eye,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
+
+// Dynamically import Leaflet LocationPickerMap with SSR disabled
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[280px] rounded-2xl bg-[#181B2F] border border-white/10 animate-pulse flex flex-col items-center justify-center text-xs text-slate-400 gap-2">
+      <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+      <span>Memuat Peta Interaktif Leaflet...</span>
+    </div>
+  ),
+});
 
 export default function MerchantPortalPage() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
@@ -27,15 +41,23 @@ export default function MerchantPortalPage() {
   const [name, setName] = useState('');
   const [city, setCity] = useState('BANDUNG');
   const [nmid, setNmid] = useState('');
-  const [latitude, setLatitude] = useState(SELARU_LAT.toString());
-  const [longitude, setLongitude] = useState(SELARU_LON.toString());
+  const [latitude, setLatitude] = useState(SELARU_LAT);
+  const [longitude, setLongitude] = useState(SELARU_LON);
   const [waNumber, setWaNumber] = useState('6281234567890');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedSticker, setGeneratedSticker] = useState<{
-    qrDataUrl: string;
+
+  // Sticker Modal State
+  const [selectedStickerMerchant, setSelectedStickerMerchant] = useState<{
+    id?: number;
     nmid: string;
     name: string;
-    hasConflict: boolean;
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+    qrDataUrl?: string;
+    rawPayload?: string;
+    hasConflict?: boolean;
+    wa_number?: string | null;
   } | null>(null);
 
   const fetchMerchants = async () => {
@@ -70,18 +92,24 @@ export default function MerchantPortalPage() {
           name,
           city,
           nmid: nmid.trim() || undefined,
-          latitude: parseFloat(latitude),
-          longitude: parseFloat(longitude),
+          latitude: Number(latitude),
+          longitude: Number(longitude),
           wa_number: waNumber.trim() || null,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setGeneratedSticker({
-          qrDataUrl: data.qrDataUrl,
+        // Tampilkan modal stiker secara instan dengan animasi confetti
+        setSelectedStickerMerchant({
+          id: data.id,
           nmid: data.nmid,
           name: data.name,
+          city: data.city,
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+          qrDataUrl: data.qrDataUrl,
+          rawPayload: data.rawPayload,
           hasConflict: data.hasConflict,
         });
         fetchMerchants();
@@ -118,8 +146,15 @@ export default function MerchantPortalPage() {
 
   return (
     <div className="min-h-screen bg-[#070913] text-white p-4 md:p-8">
+      {/* Pop-up Stiker QRIS Resmi */}
+      <StickerModal
+        isOpen={!!selectedStickerMerchant}
+        onClose={() => setSelectedStickerMerchant(null)}
+        merchant={selectedStickerMerchant}
+      />
+
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* Header */}
+        {/* Header Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
@@ -134,7 +169,7 @@ export default function MerchantPortalPage() {
                 <h1 className="text-2xl font-extrabold">ValidQR Merchant Portal</h1>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Kelola data merchant resmi, generate stiker QRIS, dan simulasikan konflik rebrand
+                Pilih lokasi merchant dengan Leaflet, generate stiker QRIS, dan kelola database
               </p>
             </div>
           </div>
@@ -142,7 +177,7 @@ export default function MerchantPortalPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/"
-              className="px-3 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-xs border border-indigo-500/40 flex items-center gap-1.5 transition-all"
+              className="px-3.5 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-xs border border-indigo-500/40 flex items-center gap-1.5 transition-all shadow-sm"
             >
               <QrCode className="w-4 h-4" />
               <span>Buka Mobile App Scanner</span>
@@ -152,188 +187,141 @@ export default function MerchantPortalPage() {
               onClick={fetchMerchants}
               disabled={loading}
               className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              title="Refresh"
+              title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* Top Grid: Form Generator & Sticker Preview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Form */}
-          <div className="md:col-span-2 p-6 rounded-3xl bg-[#101424] border border-white/10 space-y-4">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Plus className="w-4 h-4 text-emerald-400" />
-              Registrasi Merchant & Generate Stiker QRIS
-            </h2>
+        {/* Form Generator & Interactive Map */}
+        <div className="p-6 rounded-3xl bg-[#101424] border border-white/10 space-y-6">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-400" />
+                Registrasi Merchant &amp; Generate Stiker QRIS
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Titik GPS yang Anda pilih pada peta di bawah akan menjadi batas perimeter geofence 15 meter
+              </p>
+            </div>
+          </div>
 
-            <form onSubmit={handleGenerateSticker} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Nama Merchant *</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Contoh: WARUNG BAKSO PAK BUDI"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Kota Merchant</label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={e => setCity(e.target.value)}
-                    placeholder="BANDUNG"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">
-                    NMID (Kosongkan untuk acak / isi untuk tes Rebrand)
-                  </label>
-                  <input
-                    type="text"
-                    value={nmid}
-                    onChange={e => setNmid(e.target.value)}
-                    placeholder="Contoh: ID10293847561"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-400 mb-1 font-semibold">Nomor WhatsApp Alert</label>
-                  <input
-                    type="text"
-                    value={waNumber}
-                    onChange={e => setWaNumber(e.target.value)}
-                    placeholder="6281234567890"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Coordinates & Quick Preset Buttons */}
+          <form onSubmit={handleGenerateSticker} className="space-y-5 text-xs">
+            {/* Merchant Identity Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-slate-400 font-semibold">Koordinat GPS Geofence</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLatitude(SELARU_LAT.toString());
-                        setLongitude(SELARU_LON.toString());
-                      }}
-                      className="text-[10px] text-indigo-400 hover:underline"
-                    >
-                      Preset: Gedung Selaru
-                    </button>
-                    <span>•</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLatitude(JAKARTA_LAT.toString());
-                        setLongitude(JAKARTA_LON.toString());
-                      }}
-                      className="text-[10px] text-rose-400 hover:underline"
-                    >
-                      Preset: Jakarta Pusat
-                    </button>
-                  </div>
-                </div>
+                <label className="block text-slate-300 mb-1.5 font-semibold">Nama Merchant *</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Contoh: WARUNG BAKSO PAK BUDI"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
 
-                <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 mb-1.5 font-semibold">Kota Merchant</label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={e => setCity(e.target.value)}
+                  placeholder="BANDUNG"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 mb-1.5 font-semibold">
+                  NMID (Kosongkan untuk generate otomatis / isi untuk uji Rebrand)
+                </label>
+                <input
+                  type="text"
+                  value={nmid}
+                  onChange={e => setNmid(e.target.value)}
+                  placeholder="Contoh: ID10293847561"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1.5 font-semibold">Nomor WhatsApp Alert (Anti-Fraud)</label>
+                <input
+                  type="text"
+                  value={waNumber}
+                  onChange={e => setWaNumber(e.target.value)}
+                  placeholder="6281234567890"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* ── Leaflet Interactive Map Picker ── */}
+            <div className="space-y-2 pt-2">
+              <label className="block text-slate-300 font-bold flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-emerald-400" />
+                Pilih Lokasi Merchant pada Peta (Leaflet Geofence)
+              </label>
+
+              <LocationPickerMap
+                latitude={latitude}
+                longitude={longitude}
+                onChange={(lat, lon) => {
+                  setLatitude(lat);
+                  setLongitude(lon);
+                }}
+                height="320px"
+                geofenceRadius={15}
+                merchantName={name || 'Merchant Baru'}
+              />
+
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div>
+                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">Latitude Terpilih</span>
                   <input
-                    type="text"
+                    type="number"
+                    step="any"
                     value={latitude}
-                    onChange={e => setLatitude(e.target.value)}
-                    placeholder="Latitude"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
+                    onChange={e => setLatitude(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                   />
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">Longitude Terpilih</span>
                   <input
-                    type="text"
+                    type="number"
+                    step="any"
                     value={longitude}
-                    onChange={e => setLongitude(e.target.value)}
-                    placeholder="Longitude"
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
+                    onChange={e => setLongitude(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
+            </div>
 
+            {/* Submit Button */}
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white font-bold flex items-center justify-center gap-2 shadow-lg transition-all"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
               >
                 {isSubmitting ? (
-                  <span>Menyimpan & Membuat QR...</span>
+                  <span>Sedang Membuat Stiker QRIS...</span>
                 ) : (
                   <>
                     <QrCode className="w-4 h-4" />
-                    <span>Generate & Simpan Stiker QRIS</span>
+                    <span>Generate &amp; Tampilkan Stiker QRIS</span>
                   </>
                 )}
               </button>
-            </form>
-          </div>
-
-          {/* Generated Sticker Preview */}
-          <div className="p-6 rounded-3xl bg-[#101424] border border-white/10 flex flex-col items-center justify-center text-center">
-            {generatedSticker ? (
-              <div className="space-y-3 w-full">
-                <div className="text-xs font-bold text-emerald-400 flex items-center justify-center gap-1">
-                  <CheckCircle className="w-4 h-4" /> Stiker Berhasil Dibuat!
-                </div>
-
-                {generatedSticker.hasConflict && (
-                  <div className="p-2 rounded-xl bg-amber-950/50 border border-amber-500/40 text-amber-300 text-[10px] flex items-center gap-1.5 text-left">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-                    <span>Perhatian: NMID ini memiliki beberapa record aktif (Simulasi Rebrand)!</span>
-                  </div>
-                )}
-
-                <div className="bg-white p-3 rounded-2xl shadow-lg border border-slate-200 mx-auto inline-block">
-                  <img
-                    src={generatedSticker.qrDataUrl}
-                    alt="Sticker QR"
-                    className="w-48 h-48 mx-auto"
-                  />
-                  <div className="text-[11px] font-bold text-slate-800 mt-2 truncate max-w-[200px]">
-                    {generatedSticker.name}
-                  </div>
-                  <div className="text-[9px] font-mono text-slate-500">
-                    {generatedSticker.nmid}
-                  </div>
-                </div>
-
-                <a
-                  href={generatedSticker.qrDataUrl}
-                  download={`stiker_${generatedSticker.nmid}.png`}
-                  className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors block"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Gambar QR</span>
-                </a>
-              </div>
-            ) : (
-              <div className="text-center text-slate-400 space-y-2">
-                <div className="w-16 h-16 rounded-2xl bg-white/5 mx-auto flex items-center justify-center text-slate-500">
-                  <QrCode className="w-8 h-8" />
-                </div>
-                <h3 className="text-xs font-bold text-white">Preview Stiker QR</h3>
-                <p className="text-[11px] max-w-xs">
-                  Isi formulir di sebelah kiri dan klik &quot;Generate &amp; Simpan&quot; untuk melihat kode QRIS fisik.
-                </p>
-              </div>
-            )}
-          </div>
+            </div>
+          </form>
         </div>
 
         {/* Merchants Database Table */}
@@ -341,7 +329,9 @@ export default function MerchantPortalPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-white">Daftar Merchant Terdaftar ({merchants.length})</h2>
-              <p className="text-xs text-slate-400">Database resmi yang digunakan oleh Layer 1 &amp; Layer 3</p>
+              <p className="text-xs text-slate-400">
+                Klik tombol &quot;Lihat Stiker&quot; pada baris mana saja untuk mencetak atau mengunduh QRIS
+              </p>
             </div>
           </div>
 
@@ -354,8 +344,8 @@ export default function MerchantPortalPage() {
                   <th className="py-2.5 px-3">Nama Merchant</th>
                   <th className="py-2.5 px-3">Kota</th>
                   <th className="py-2.5 px-3">Koordinat (Lat, Lon)</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                  <th className="py-2.5 px-3">Geofence</th>
+                  <th className="py-2.5 px-3 text-right">Aksi Stiker &amp; Hapus</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -381,21 +371,44 @@ export default function MerchantPortalPage() {
                       <td className="py-3 px-3 font-semibold text-white">{m.name}</td>
                       <td className="py-3 px-3 text-slate-300">{m.city || 'BANDUNG'}</td>
                       <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
-                        {m.latitude.toFixed(5)}, {m.longitude.toFixed(5)}
+                        {Number(m.latitude).toFixed(5)}, {Number(m.longitude).toFixed(5)}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          AKTIF
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                          <span>±15m</span>
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right">
-                        <button
-                          onClick={() => handleDeleteMerchant(m.id)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() =>
+                              setSelectedStickerMerchant({
+                                id: m.id,
+                                nmid: m.nmid,
+                                name: m.name,
+                                city: m.city,
+                                latitude: Number(m.latitude),
+                                longitude: Number(m.longitude),
+                                hasConflict,
+                                wa_number: m.wa_number,
+                              })
+                            }
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all"
+                            title="Lihat / Cetak Stiker QRIS"
+                          >
+                            <QrCode className="w-3 h-3" />
+                            <span>Lihat Stiker</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteMerchant(m.id)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
+                            title="Hapus Merchant"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -9,11 +9,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/leaflet": "^1.9.22",
     "canvas-confetti": "^1.9.4",
     "fast-levenshtein": "^3.0.0",
     "framer-motion": "^13.4.5",
     "html5-qrcode": "^2.3.8",
     "jsqr": "^1.4.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
     "pg": "^8.23.0",

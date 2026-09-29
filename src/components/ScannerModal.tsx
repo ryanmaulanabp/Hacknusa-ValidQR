@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/LanguageContext';
 import { QrPayload, ScanResponse } from '@/lib/types';
 import { DEMO_PRESETS, SELARU_LAT, SELARU_LON } from '@/lib/mockData';
@@ -19,7 +20,18 @@ import {
   Flashlight,
   Radio,
   SwitchCamera,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
+
+const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[220px] rounded-2xl bg-[#181B2F] border border-white/10 flex items-center justify-center text-xs text-slate-400">
+      Memuat Peta Leaflet...
+    </div>
+  ),
+});
 
 interface ScannerModalProps {
   isOpen: boolean;
@@ -36,6 +48,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [showMapPicker, setShowMapPicker] = useState(false);
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lon: number } | null>({
     lat: SELARU_LAT,
     lon: SELARU_LON,
@@ -555,7 +568,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
 
         {/* Bottom Action Sheet: Gallery & Presets */}
         <div className="px-5 py-4 bg-[#101424] border-t border-white/10 z-20 space-y-3">
-          {/* Upload Button & GPS Toggle */}
+          {/* Upload Button & GPS Toggle & Map Picker */}
           <div className="flex items-center justify-between gap-2">
             <input
               type="file"
@@ -566,25 +579,67 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-2 border border-white/10 transition-all"
+              className="flex-1 py-2.5 px-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 transition-all"
             >
-              <Upload className="w-4 h-4 text-sky-400" />
+              <Upload className="w-3.5 h-3.5 text-sky-400" />
               <span>{t('scan_upload_btn')}</span>
             </button>
 
             <button
-              onClick={() => setUseRealGps(!useRealGps)}
-              className={`py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                useRealGps
+              onClick={() => {
+                setShowMapPicker(false);
+                setUseRealGps(!useRealGps);
+              }}
+              className={`py-2.5 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all ${
+                useRealGps && !showMapPicker
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
                   : 'bg-white/10 text-slate-300 border-white/10'
               }`}
               title="Toggle antara GPS Asli Perangkat vs Mock Gedung Selaru"
             >
-              <Radio className="w-3.5 h-3.5" />
-              <span>{useRealGps ? 'Live GPS Nyata' : 'Selaru Mock'}</span>
+              <Radio className="w-3 h-3" />
+              <span>{useRealGps && !showMapPicker ? 'Live GPS' : 'Selaru'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowMapPicker(!showMapPicker)}
+              className={`py-2.5 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all ${
+                showMapPicker
+                  ? 'bg-indigo-600/40 text-indigo-200 border-indigo-500/50 shadow-sm'
+                  : 'bg-white/10 text-slate-300 border-white/10'
+              }`}
+              title="Pilih titik lokasi GPS pada peta Leaflet"
+            >
+              <MapPin className="w-3 h-3 text-indigo-400" />
+              <span>Peta</span>
+              {showMapPicker ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
             </button>
           </div>
+
+          {/* Collapsible Leaflet Map Picker Drawer */}
+          {showMapPicker && (
+            <div className="p-3 rounded-2xl bg-[#090B16] border border-indigo-500/30 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-indigo-300 font-semibold">
+                <span>Pilih Lokasi GPS Pengguna (Leaflet)</span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {gpsLocation ? `${gpsLocation.lat.toFixed(5)}, ${gpsLocation.lon.toFixed(5)}` : ''}
+                </span>
+              </div>
+              <LocationPickerMap
+                latitude={gpsLocation?.lat || SELARU_LAT}
+                longitude={gpsLocation?.lon || SELARU_LON}
+                onChange={(lat, lon) => {
+                  setUseRealGps(false);
+                  setGpsLocation({ lat, lon });
+                  setGpsAccuracy(0);
+                  setGpsStatus(`Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+                }}
+                height="190px"
+                geofenceRadius={15}
+                merchantName="Titik Scan Pengguna"
+              />
+            </div>
+          )}
 
           {/* Quick Demo Testing Presets */}
           <div>
