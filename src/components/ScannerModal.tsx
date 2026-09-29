@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '@/lib/LanguageContext';
 import { QrPayload, ScanResponse } from '@/lib/types';
 import { DEMO_PRESETS, SELARU_LAT, SELARU_LON } from '@/lib/mockData';
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Flashlight,
   Radio,
+  SwitchCamera,
 } from 'lucide-react';
 
 interface ScannerModalProps {
@@ -34,6 +35,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
 
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lon: number } | null>({
     lat: SELARU_LAT,
     lon: SELARU_LON,
@@ -44,12 +46,13 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
+  
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const lastScanTimeRef = useRef<number>(0);
+  const barcodeDetectorRef = useRef<any>(null);
 
   // ── GPS Streaming Real-Time (watchPosition) ─────────────────────────
-  // Mengikuti pola mobile_scanner & geolocator di Flutter:
-  // koordinat dan tingkat akurasi (± meter) diperbarui secara real-time terus-menerus.
   useEffect(() => {
     if (!isOpen) return;
 
@@ -93,7 +96,113 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     };
   }, [isOpen, useRealGps]);
 
-  // Start Camera Stream
+  const stopCamera = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsScanning(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setErrorMessage(null);
+    stopCamera();
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setHasCameraPermission(false);
+      setErrorMessage(
+        'Kamera browser membutuhkan koneksi aman (HTTPS). Silakan gunakan Upload Foto atau Preset Demo!'
+      );
+      return;
+    }
+
+    try {
+      const tryStream = async (constraints: MediaStreamConstraints) => {
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch {
+          return null;
+        }
+      };
+
+      // 1. Coba resolusi ideal & facingMode
+      let stream = await tryStream({
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      // 2. Fallback jika overconstrained
+      if (!stream) {
+        stream = await tryStream({
+          video: { facingMode: facingMode },
+        });
+      }
+
+      // 3. Fallback ke kamera default apapun
+      if (!stream) {
+        stream = await tryStream({ video: true });
+      }
+
+      if (!stream) {
+        throw new Error('Tidak dapat membuka stream kamera');
+      }
+
+      streamRef.current = stream;
+
+      const video = videoRef.current;
+      if (video) {
+        // Critical iOS & Android WebKit properties
+        video.playsInline = true;
+        video.muted = true;
+        video.autoplay = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        video.setAttribute('muted', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.srcObject = stream;
+
+        // Tunggu frame pertama video siap
+        await new Promise<void>((resolve) => {
+          if (video.readyState >= 2) {
+            resolve();
+          } else {
+            const onReady = () => {
+              video.removeEventListener('loadeddata', onReady);
+              resolve();
+            };
+            video.addEventListener('loadeddata', onReady);
+            setTimeout(resolve, 600);
+          }
+        });
+
+        try {
+          await video.play();
+        } catch (e) {
+          console.warn('Autoplay error handled:', e);
+        }
+
+        setHasCameraPermission(true);
+        setIsScanning(true);
+        lastScanTimeRef.current = 0;
+        animationFrameRef.current = requestAnimationFrame(tickScan);
+      }
+    } catch (err: any) {
+      console.warn('Camera access denied or unavailable:', err);
+      setHasCameraPermission(false);
+      setErrorMessage(
+        'Akses kamera ditolak atau tidak didukung browser. Buka izin kamera di browser Anda, atau gunakan Upload Foto / Demo Cepat!'
+      );
+    }
+  }, [facingMode, stopCamera]);
+
+  // Start Camera Stream when modal opens or camera flips
   useEffect(() => {
     if (!isOpen) {
       stopCamera();
@@ -105,49 +214,10 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     return () => {
       stopCamera();
     };
-  }, [isOpen]);
+  }, [isOpen, startCamera, stopCamera]);
 
-  const startCamera = async () => {
-    setErrorMessage(null);
-    try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
-        setHasCameraPermission(true);
-        setIsScanning(true);
-        requestAnimationFrame(tickScan);
-      }
-    } catch (err: any) {
-      console.warn('Camera access denied or unavailable:', err);
-      setHasCameraPermission(false);
-      setErrorMessage(
-        'Kamera tidak dapat diakses di browser ini. Anda tetap dapat menggunakan Upload Foto QR atau Preset Demo Cepat!'
-      );
-    }
-  };
-
-  const stopCamera = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsScanning(false);
+  const switchCamera = () => {
+    setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
   };
 
   const toggleTorch = async () => {
@@ -167,30 +237,98 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     }
   };
 
-  // Continuous frame scanning loop using jsQR
+  // Continuous frame scanning loop with Native BarcodeDetector + Center Crop jsQR
   const tickScan = () => {
-    if (!videoRef.current || videoRef.current.readyState !== videoRef.current.HAVE_ENOUGH_DATA) {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
       animationFrameRef.current = requestAnimationFrame(tickScan);
       return;
     }
 
-    const video = videoRef.current;
+    // Throttle to ~12 scans/sec to keep mobile CPU cool and responsive
+    const now = performance.now();
+    if (now - lastScanTimeRef.current < 85) {
+      animationFrameRef.current = requestAnimationFrame(tickScan);
+      return;
+    }
+    lastScanTimeRef.current = now;
+
+    // ── 1. Native Hardware BarcodeDetector (Chrome Android / Chromium) ──
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in (window as any)) {
+      try {
+        if (!barcodeDetectorRef.current) {
+          barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+        }
+        barcodeDetectorRef.current
+          .detect(video)
+          .then((barcodes: any[]) => {
+            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(80);
+              }
+              handleRawQr(barcodes[0].rawValue);
+              return;
+            }
+            animationFrameRef.current = requestAnimationFrame(tickScan);
+          })
+          .catch(() => {
+            // fallback to canvas scanner if detector fails
+            runCanvasScan(video);
+          });
+        return;
+      } catch {
+        // Fallback to canvas
+      }
+    }
+
+    // ── 2. Canvas + jsQR Fallback (iOS Safari / Firefox) ──
+    runCanvasScan(video);
+  };
+
+  const runCanvasScan = (video: HTMLVideoElement) => {
     const canvas = canvasRef.current || document.createElement('canvas');
     canvasRef.current = canvas;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
     if (ctx) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
 
-      if (code && code.data) {
-        handleRawQr(code.data);
-        return; // stop scanning loop on hit
+      if (vw > 0 && vh > 0) {
+        // A. CROP KOTAK TENGAH (Fokus ke viewfinder kamera HP)
+        // Mereduksi komputasi piksel sebesar 80%+ pada mobile 1080p
+        const minEdge = Math.min(vw, vh);
+        const sx = Math.floor((vw - minEdge) / 2);
+        const sy = Math.floor((vh - minEdge) / 2);
+
+        const cropSize = 380;
+        canvas.width = cropSize;
+        canvas.height = cropSize;
+        ctx.drawImage(video, sx, sy, minEdge, minEdge, 0, 0, cropSize, cropSize);
+        let imageData = ctx.getImageData(0, 0, cropSize, cropSize);
+
+        let code = jsQR(imageData.data, cropSize, cropSize, {
+          inversionAttempts: 'attemptBoth',
+        });
+
+        // B. Jika belum terdeteksi di kotak tengah, coba scaled full frame (lebar 360px)
+        if (!code) {
+          const fw = 360;
+          const fh = Math.round((vh * 360) / vw);
+          canvas.width = fw;
+          canvas.height = fh;
+          ctx.drawImage(video, 0, 0, fw, fh);
+          imageData = ctx.getImageData(0, 0, fw, fh);
+          code = jsQR(imageData.data, fw, fh, { inversionAttempts: 'attemptBoth' });
+        }
+
+        if (code && code.data) {
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(80);
+          }
+          handleRawQr(code.data);
+          return;
+        }
       }
     }
 
@@ -230,27 +368,58 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     }
   };
 
-  // Handle File Upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle File Upload with Native BarcodeDetector + jsQR Auto-Scale
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Reset input so user can pick the same file again if needed
+    e.target.value = '';
+
+    // 1. Try Hardware BarcodeDetector if available
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in (window as any) && 'createImageBitmap' in window) {
+      try {
+        const bitmap = await createImageBitmap(file);
+        const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+        const barcodes = await detector.detect(bitmap);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          handleRawQr(barcodes[0].rawValue);
+          return;
+        }
+      } catch (err) {
+        console.warn('BarcodeDetector on image file skipped:', err);
+      }
+    }
+
+    // 2. Fallback to Canvas + jsQR with auto-downscaling
     const reader = new FileReader();
     reader.onload = event => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
+        const maxDim = 900;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          ctx.drawImage(img, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
           if (code && code.data) {
             handleRawQr(code.data);
           } else {
-            alert('Tidak ditemukan kode QR yang valid di dalam foto yang diupload.');
+            alert('Tidak ditemukan kode QR yang valid di dalam foto. Pastikan gambar jelas dan tidak blur.');
           }
         }
       };
@@ -297,6 +466,14 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={switchCamera}
+              className="p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+              title="Ganti Kamera Depan/Belakang"
+            >
+              <SwitchCamera className="w-4 h-4" />
+            </button>
+
             <button
               onClick={toggleTorch}
               className={`p-2 rounded-full border transition-all ${
