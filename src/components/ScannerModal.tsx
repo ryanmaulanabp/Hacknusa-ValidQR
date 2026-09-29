@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/LanguageContext';
 import { QrPayload, ScanResponse } from '@/lib/types';
-import { DEMO_PRESETS, SELARU_LAT, SELARU_LON } from '@/lib/mockData';
+import { SELARU_LAT, SELARU_LON } from '@/lib/mockData';
 import { parseQRIS } from '@/lib/emvco';
 import jsQR from 'jsqr';
 import {
@@ -12,10 +12,6 @@ import {
   Upload,
   Camera,
   MapPin,
-  Sparkles,
-  AlertTriangle,
-  CheckCircle,
-  ShieldBan,
   RefreshCw,
   Flashlight,
   Radio,
@@ -128,7 +124,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setHasCameraPermission(false);
       setErrorMessage(
-        'Kamera browser membutuhkan koneksi aman (HTTPS). Silakan gunakan Upload Foto atau Preset Demo!'
+        'Kamera browser membutuhkan koneksi aman (HTTPS). Silakan gunakan tombol Upload Foto!'
       );
       return;
     }
@@ -441,11 +437,6 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     reader.readAsDataURL(file);
   };
 
-  // Trigger quick demo preset
-  const runPreset = (preset: typeof DEMO_PRESETS.stickerA) => {
-    handleRawQr(preset.rawPayload);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -523,7 +514,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                 <Camera className="w-8 h-8" />
               </div>
               <p className="text-xs text-slate-300 max-w-xs">
-                {errorMessage || 'Akses kamera sedang dipersiapkan atau gunakan preset demo cepat di bawah ini.'}
+                {errorMessage || 'Akses kamera sedang dipersiapkan. Anda juga dapat menggunakan tombol Upload Foto.'}
               </p>
               <button
                 onClick={startCamera}
@@ -640,57 +631,6 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
               />
             </div>
           )}
-
-          {/* Quick Demo Testing Presets */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                {t('scan_demo_presets')}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {/* Preset A: VERIFIED */}
-              <button
-                onClick={() => runPreset(DEMO_PRESETS.stickerA)}
-                className="p-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/40 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-emerald-400">Stiker A</span>
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                </div>
-                <div className="text-[9px] font-bold text-white mt-1 line-clamp-1">Pak Budi Asli</div>
-                <div className="text-[8px] text-emerald-300/80">VERIFIED (Hijau)</div>
-              </button>
-
-              {/* Preset B: BLOCKED */}
-              <button
-                onClick={() => runPreset(DEMO_PRESETS.stickerB)}
-                className="p-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/40 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-rose-400">Stiker B</span>
-                  <ShieldBan className="w-3.5 h-3.5 text-rose-400" />
-                </div>
-                <div className="text-[9px] font-bold text-white mt-1 line-clamp-1">Overlay Jauh</div>
-                <div className="text-[8px] text-rose-300/80">BLOCKED (Merah)</div>
-              </button>
-
-              {/* Preset C: WARNING */}
-              <button
-                onClick={() => runPreset(DEMO_PRESETS.stickerC)}
-                className="p-2 rounded-xl bg-amber-950/40 hover:bg-amber-900/50 border border-amber-500/40 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold text-amber-400">Stiker C</span>
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <div className="text-[9px] font-bold text-white mt-1 line-clamp-1">Rebrand Nama</div>
-                <div className="text-[8px] text-amber-300/80">WARNING (Kuning)</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
