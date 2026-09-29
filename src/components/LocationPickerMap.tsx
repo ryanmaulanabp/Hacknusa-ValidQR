@@ -307,10 +307,18 @@ export default function LocationPickerMap({
     }, 10000);
   };
 
-  // ── Micro-Adjustment Nudge (Geser Pin 1-2 Meter) ─────────────────────
-  const nudge = (latDelta: number, lonDelta: number) => {
-    const newLat = latitude + latDelta;
-    const newLon = longitude + lonDelta;
+  // ── Exact 1-Meter Geodesic Nudge (Presisi 1 Meter Matematis) ────────
+  // 1 meter latitude = ~0.00000899 derajat
+  // 1 meter longitude = 0.00000899 / cos(lat) derajat
+  const [nudgeStep, setNudgeStep] = useState<number>(1); // Default 1 meter!
+
+  const nudgeMeter = (metersNorth: number, metersEast: number) => {
+    const latDelta = metersNorth * 0.00000899;
+    const cosLat = Math.cos((latitude * Math.PI) / 180);
+    const lonDelta = (metersEast * 0.00000899) / (cosLat !== 0 ? Math.abs(cosLat) : 1);
+
+    const newLat = parseFloat((latitude + latDelta).toFixed(7));
+    const newLon = parseFloat((longitude + lonDelta).toFixed(7));
     updatePosition(newLat, newLon);
     if (mapRef.current) {
       mapRef.current.panTo([newLat, newLon]);
@@ -454,43 +462,69 @@ export default function LocationPickerMap({
           </div>
         )}
 
-        {/* Micro-Adjustment D-Pad (Nudge 1 Meter) */}
+        {/* Micro-Adjustment D-Pad (Presisi 1 Meter) */}
         {!readOnly && (
-          <div className="absolute top-2 right-2 z-[400] bg-black/75 backdrop-blur-md p-1 rounded-xl border border-white/15 shadow-lg flex flex-col items-center gap-0.5">
+          <div className="absolute top-2 right-2 z-[400] bg-black/85 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 shadow-2xl flex flex-col items-center gap-1">
+            {/* Step Size Selector: 1m vs 5m */}
+            <div className="flex items-center gap-1 pb-1 border-b border-white/10 text-[9px] font-bold">
+              <button
+                type="button"
+                onClick={() => setNudgeStep(1)}
+                className={`px-1.5 py-0.5 rounded ${
+                  nudgeStep === 1 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Presisi 1 Meter"
+              >
+                1m
+              </button>
+              <button
+                type="button"
+                onClick={() => setNudgeStep(5)}
+                className={`px-1.5 py-0.5 rounded ${
+                  nudgeStep === 5 ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+                title="Presisi 5 Meter"
+              >
+                5m
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => nudge(0.000015, 0)}
-              className="p-1 rounded-lg hover:bg-white/20 text-white"
-              title="Geser Utara (+1.5m)"
+              onClick={() => nudgeMeter(nudgeStep, 0)}
+              className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors"
+              title={`Geser Utara (+${nudgeStep}m)`}
             >
-              <ArrowUp className="w-3 h-3" />
+              <ArrowUp className="w-3.5 h-3.5" />
             </button>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => nudge(0, -0.000015)}
-                className="p-1 rounded-lg hover:bg-white/20 text-white"
-                title="Geser Barat (-1.5m)"
+                onClick={() => nudgeMeter(0, -nudgeStep)}
+                className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors"
+                title={`Geser Barat (-${nudgeStep}m)`}
               >
-                <ArrowLeft className="w-3 h-3" />
+                <ArrowLeft className="w-3.5 h-3.5" />
               </button>
-              <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm" />
+              <div className="text-[8px] font-bold font-mono text-indigo-300 px-1 py-0.5 rounded bg-indigo-950/80 border border-indigo-500/40">
+                ±{nudgeStep}m
+              </div>
               <button
                 type="button"
-                onClick={() => nudge(0, 0.000015)}
-                className="p-1 rounded-lg hover:bg-white/20 text-white"
-                title="Geser Timur (+1.5m)"
+                onClick={() => nudgeMeter(0, nudgeStep)}
+                className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors"
+                title={`Geser Timur (+${nudgeStep}m)`}
               >
-                <ArrowRight className="w-3 h-3" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
             <button
               type="button"
-              onClick={() => nudge(-0.000015, 0)}
-              className="p-1 rounded-lg hover:bg-white/20 text-white"
-              title="Geser Selatan (-1.5m)"
+              onClick={() => nudgeMeter(-nudgeStep, 0)}
+              className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors"
+              title={`Geser Selatan (-${nudgeStep}m)`}
             >
-              <ArrowDown className="w-3 h-3" />
+              <ArrowDown className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
