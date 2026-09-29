@@ -46,10 +46,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const [isScanning, setIsScanning] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [showMapPicker, setShowMapPicker] = useState(false);
-  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lon: number } | null>({
-    lat: SELARU_LAT,
-    lon: SELARU_LON,
-  });
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('Menghubungkan GPS satelit...');
   const [useRealGps, setUseRealGps] = useState<boolean>(true); // Default to live real GPS stream!
@@ -617,17 +614,34 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
             <button
               onClick={() => {
                 setShowMapPicker(false);
-                setUseRealGps(!useRealGps);
+                setUseRealGps(true);
+                if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+                  setGpsStatus('Menyegarkan GPS satelit...');
+                  navigator.geolocation.getCurrentPosition(
+                    pos => {
+                      const lat = pos.coords.latitude;
+                      const lon = pos.coords.longitude;
+                      const acc = Math.round(pos.coords.accuracy);
+                      setGpsLocation({ lat, lon });
+                      setGpsAccuracy(acc);
+                      setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+                    },
+                    err => {
+                      console.warn('GPS refresh error:', err);
+                    },
+                    { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+                  );
+                }
               }}
               className={`py-2.5 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all ${
                 useRealGps && !showMapPicker
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
                   : 'bg-white/10 text-slate-300 border-white/10'
               }`}
-              title="Toggle antara GPS Asli Perangkat vs Mock Gedung Selaru"
+              title="Gunakan & segarkan GPS satelit perangkat asli"
             >
-              <Radio className="w-3 h-3" />
-              <span>{useRealGps && !showMapPicker ? 'Live GPS' : 'Selaru'}</span>
+              <Radio className="w-3 h-3 text-emerald-400" />
+              <span>GPS Asli</span>
             </button>
 
             <button

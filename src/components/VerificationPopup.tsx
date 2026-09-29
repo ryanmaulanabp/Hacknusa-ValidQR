@@ -159,6 +159,24 @@ export default function VerificationPopup({
             </div>
           )}
 
+          {/* Detailed Geofence Distance Context */}
+          {isBlocked && response.distance_meters !== null && response.distance_meters > 15 && (
+            <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200 space-y-1.5">
+              <div className="font-extrabold text-white flex items-center gap-1.5 text-xs">
+                <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>
+                  Jarak ke Toko: {response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km (${response.distance_meters} m)` : `${response.distance_meters} meter`}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Toko <strong className="text-white">{response.matched_name || response.scanned_name}</strong> terdaftar di lokasi berjarak <strong>{response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km` : `${response.distance_meters} meter`}</strong> dari posisi Anda saat ini (batas toleransi kasir: {response.geofence_radius}m).
+              </p>
+              <div className="text-[10px] text-rose-300/80 pt-1 border-t border-rose-500/20">
+                💡 <em>Catatan: Angka {response.distance_meters}m ini adalah <strong>jarak fisik sebenarnya</strong> antara posisi Anda dengan toko terdaftar, bukan kesalahan bacaan sensor GPS.</em>
+              </div>
+            </div>
+          )}
+
           {/* Scanned Merchant Card */}
           <div className={`p-4 rounded-2xl ${theme.cardBg} border border-white/10 space-y-2`}>
             <div className="flex items-center justify-between text-xs">
