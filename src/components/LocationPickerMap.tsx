@@ -20,17 +20,20 @@ import {
   X,
   Compass,
   Radio,
+  Lock,
 } from 'lucide-react';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
+import { haversineDistanceMeters } from '@/lib/geofence';
 
 interface LocationPickerMapProps {
   latitude: number;
   longitude: number;
   onChange: (lat: number, lon: number) => void;
   height?: string;
-  geofenceRadius?: number; // in meters, default 15
+  geofenceRadius?: number; // in meters, default 20
   merchantName?: string;
   readOnly?: boolean;
+  hideOverlays?: boolean;
 }
 
 interface SearchResult {
@@ -45,15 +48,17 @@ export default function LocationPickerMap({
   longitude,
   onChange,
   height = '330px',
-  geofenceRadius = 15,
+  geofenceRadius = 20,
   merchantName = 'Lokasi Terpilih',
   readOnly = false,
+  hideOverlays = false,
 }: LocationPickerMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
   const geofenceCircleRef = useRef<L.Circle | null>(null);
   const accuracyCircleRef = useRef<L.Circle | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -108,6 +113,21 @@ export default function LocationPickerMap({
       iconSize: [36, 36],
       iconAnchor: [18, 36],
       popupAnchor: [0, -36],
+    });
+  };
+
+  // Custom User Location Pin Icon (for live tracking relative to merchant)
+  const createUserIcon = () => {
+    return L.divIcon({
+      className: 'custom-user-pin',
+      html: `
+        <div style="position: relative; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;">
+          <div style="position: absolute; width: 24px; height: 24px; border-radius: 50%; background: rgba(16, 185, 129, 0.35); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+          <div style="width: 14px; height: 14px; border-radius: 50%; background: #10B981; border: 2.5px solid #FFFFFF; box-shadow: 0 0 10px rgba(16, 185, 129, 0.9);"></div>
+        </div>
+      `,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
     });
   };
 
@@ -281,9 +301,27 @@ export default function LocationPickerMap({
     ) {
       markerRef.current.setLatLng([latitude, longitude]);
       geofenceCircleRef.current.setLatLng([latitude, longitude]);
-      mapRef.current.panTo([latitude, longitude]);
+      mapRef.current.flyTo([latitude, longitude], 19, { animate: true });
+      fetchAddress(latitude, longitude);
     }
   }, [latitude, longitude]);
+
+  // Sync dragging capability when readOnly changes
+  useEffect(() => {
+    if (!markerRef.current) return;
+    if (readOnly) {
+      markerRef.current.dragging?.disable();
+    } else {
+      markerRef.current.dragging?.enable();
+    }
+  }, [readOnly]);
+
+  // Sync geofence circle radius
+  useEffect(() => {
+    if (geofenceCircleRef.current) {
+      geofenceCircleRef.current.setRadius(geofenceRadius);
+    }
+  }, [geofenceRadius]);
 
   // ── High-Precision Multi-Sample Satellite GPS Locator ───────────────
   const startHighPrecisionGps = (continuous = false) => {
@@ -315,22 +353,48 @@ export default function LocationPickerMap({
 
         setGpsAccuracy(acc);
 
-        if (acc <= bestAcc || continuous) {
-          bestAcc = acc;
-          updatePosition(lat, lon, acc);
-          if (mapRef.current) {
-            mapRef.current.flyTo([lat, lon], 19, { animate: true });
-          }
-        }
+        if (readOnly) {
+          // Mode Read-Only: Jangan ubah koordinat merchant!
+          // Hitung jarak real-time dari posisi pengguna ke merchant
+          const dist = haversineDistanceMeters(lat, lon, latitude, longitude);
+          const distText = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(2)}km`;
+          const inGeofence = dist <= geofenceRadius;
+          setGpsStatusText(
+            `GPS Anda: ±${acc}m (${distText} dari merchant • ${
+              inGeofence ? 'Dalam Radius 20m ✅' : 'Luar Radius ⚠️'
+            })`
+          );
 
-        setGpsStatusText(`Akurasi GPS: ±${acc}m`);
+          if (mapRef.current) {
+            if (userMarkerRef.current) {
+              userMarkerRef.current.setLatLng([lat, lon]);
+            } else {
+              userMarkerRef.current = L.marker([lat, lon], {
+                icon: createUserIcon(),
+              })
+                .addTo(mapRef.current)
+                .bindPopup('Posisi GPS Anda Saat Ini');
+            }
+          }
+        } else {
+          if (acc <= bestAcc || continuous) {
+            bestAcc = acc;
+            updatePosition(lat, lon, acc);
+            if (mapRef.current) {
+              mapRef.current.flyTo([lat, lon], 19, { animate: true });
+            }
+          }
+          setGpsStatusText(`Akurasi GPS: ±${acc}m`);
+        }
 
         // If high precision <= 10m is achieved and not in continuous mode, finish
         if (!continuous && (acc <= 10 || sampleCount >= maxSamples)) {
           navigator.geolocation.clearWatch(watchId);
           watchIdRef.current = null;
           setIsLocating(false);
-          setGpsStatusText(`GPS Terkunci: ±${acc}m`);
+          if (!readOnly) {
+            setGpsStatusText(`GPS Terkunci: ±${acc}m`);
+          }
         }
       },
       err => {
@@ -367,6 +431,10 @@ export default function LocationPickerMap({
     if (watchIdRef.current !== null && typeof navigator !== 'undefined') {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
+    }
+    if (userMarkerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(userMarkerRef.current);
+      userMarkerRef.current = null;
     }
     setIsTrackingLive(false);
     setIsLocating(false);
@@ -426,29 +494,36 @@ export default function LocationPickerMap({
       {/* Search Bar & Map Controls Header */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
-          {/* Address Search Form */}
-          <form onSubmit={handleSearch} className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Cari gedung / jalan / alamat toko..."
-              className="w-full pl-8 pr-7 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 shadow-inner"
-            />
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setShowSearchResults(false);
-                }}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </form>
+          {/* Address Search Form (or Read-Only indicator) */}
+          {readOnly ? (
+            <div className="flex-1 px-3 py-2 rounded-xl bg-[#181B2F] border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate font-medium">Mode Lihat: Lokasi GPS Terkunci ({merchantName})</span>
+            </div>
+          ) : (
+            <form onSubmit={handleSearch} className="relative flex-1">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Cari gedung / jalan / alamat toko..."
+                className="w-full pl-8 pr-7 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 shadow-inner"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setShowSearchResults(false);
+                  }}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </form>
+          )}
 
           {/* Satellite Layer Toggle */}
           <button
@@ -474,23 +549,25 @@ export default function LocationPickerMap({
                 ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-emerald-500/20'
                 : 'bg-white/10 hover:bg-white/15 text-slate-300 border-white/10'
             }`}
-            title="Lacak posisi GPS secara terus menerus"
+            title={readOnly ? "Lacak jarak GPS Anda ke merchant secara realtime" : "Lacak posisi GPS secara terus menerus"}
           >
             <Radio className={`w-3.5 h-3.5 ${isTrackingLive ? 'animate-pulse text-emerald-400' : ''}`} />
-            <span className="hidden sm:inline">{isTrackingLive ? 'Live Track ON' : 'Live Track'}</span>
+            <span className="hidden sm:inline">{isTrackingLive ? 'Live Track ON' : (readOnly ? 'Cek Jarak GPS' : 'Live Track')}</span>
           </button>
 
-          {/* High-Accuracy GPS Locator Button */}
-          <button
-            type="button"
-            onClick={() => startHighPrecisionGps(false)}
-            disabled={isLocating}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
-            title="Kunci Titik GPS Akurat dari Satelit HP Anda"
-          >
-            <Navigation className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
-            <span>{isLocating ? 'Kunci...' : 'GPS Saya'}</span>
-          </button>
+          {/* High-Accuracy GPS Locator Button (Only in edit mode) */}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => startHighPrecisionGps(false)}
+              disabled={isLocating}
+              className="px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
+              title="Kunci Titik GPS Akurat dari Satelit HP Anda"
+            >
+              <Navigation className={`w-3.5 h-3.5 ${isLocating ? 'animate-spin' : ''}`} />
+              <span>{isLocating ? 'Kunci...' : 'GPS Saya'}</span>
+            </button>
+          )}
         </div>
 
         {/* Live Reverse Geocoded Address Box */}
@@ -503,7 +580,7 @@ export default function LocationPickerMap({
         </div>
 
         {/* Search Results Dropdown */}
-        {showSearchResults && (
+        {showSearchResults && !readOnly && (
           <div className="relative z-[500]">
             <div className="absolute left-0 right-0 top-0 bg-[#12162A] border border-white/15 rounded-2xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto divide-y divide-white/10">
               {isSearching ? (
@@ -535,22 +612,22 @@ export default function LocationPickerMap({
 
       {/* Map Canvas Container */}
       <div
-        className="relative w-full rounded-2xl overflow-hidden border border-white/15 shadow-inner"
+        className="relative isolate w-full rounded-2xl overflow-hidden border border-white/15 shadow-inner"
         style={{ height }}
       >
         <div ref={containerRef} className="w-full h-full z-0" />
 
         {/* GPS Live Accuracy Status Toast */}
-        {gpsStatusText && (
-          <div className="absolute top-2 left-2 z-[400] px-2.5 py-1 rounded-full bg-black/85 backdrop-blur-md border border-emerald-500/40 text-[10px] text-emerald-300 font-semibold flex items-center gap-1.5 shadow-md">
+        {!hideOverlays && gpsStatusText && (
+          <div className="absolute top-2 left-2 z-20 px-2.5 py-1 rounded-full bg-black/85 backdrop-blur-md border border-emerald-500/40 text-[10px] text-emerald-300 font-semibold flex items-center gap-1.5 shadow-md">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>{gpsStatusText}</span>
           </div>
         )}
 
         {/* Micro-Adjustment D-Pad (Presisi 1 Meter) */}
-        {!readOnly && (
-          <div className="absolute top-2 right-2 z-[400] bg-black/85 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 shadow-2xl flex flex-col items-center gap-1">
+        {!readOnly && !hideOverlays && (
+          <div className="absolute top-2 right-2 z-20 bg-black/85 backdrop-blur-md p-1.5 rounded-2xl border border-white/20 shadow-2xl flex flex-col items-center gap-1">
             {/* Step Size Selector: 1m vs 5m */}
             <div className="flex items-center gap-1 pb-1 border-b border-white/10 text-[9px] font-bold">
               <button
@@ -616,48 +693,57 @@ export default function LocationPickerMap({
         )}
 
         {/* Live Coordinate Overlay Badge */}
-        <div className="absolute bottom-2 left-2 right-2 sm:right-auto z-[400] px-3 py-1.5 rounded-xl bg-black/85 backdrop-blur-md border border-white/15 text-white flex items-center justify-between sm:justify-start gap-3 shadow-lg pointer-events-none">
-          <div className="flex items-center gap-1.5 font-mono text-[11px]">
-            <Crosshair className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span>
-              {latitude.toFixed(6)}, {longitude.toFixed(6)}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-indigo-300 font-semibold">
-              Geofence: ±{geofenceRadius}m
-            </span>
-            {gpsAccuracy !== null && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                ±{gpsAccuracy}m Akurat
+        {!hideOverlays && (
+          <div className="absolute bottom-2 left-2 right-2 sm:right-auto z-20 px-3 py-1.5 rounded-xl bg-black/85 backdrop-blur-md border border-white/15 text-white flex items-center justify-between sm:justify-start gap-3 shadow-lg pointer-events-none">
+            <div className="flex items-center gap-1.5 font-mono text-[11px]">
+              <Crosshair className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span>
+                {latitude.toFixed(6)}, {longitude.toFixed(6)}
               </span>
-            )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-indigo-300 font-semibold">
+                Geofence: ±{geofenceRadius}m
+              </span>
+              {gpsAccuracy !== null && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                  ±{gpsAccuracy}m Akurat
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Preset Buttons Helper Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
-        <span>Klik di mana saja pada peta atau cari alamat untuk menempatkan pin</span>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => updatePosition(SELARU_LAT, SELARU_LON)}
-            className="hover:text-indigo-400 underline"
-          >
-            Selaru (Bandung)
-          </button>
-          <span>•</span>
-          <button
-            type="button"
-            onClick={() => updatePosition(JAKARTA_LAT, JAKARTA_LON)}
-            className="hover:text-rose-400 underline"
-          >
-            Monas (Jakarta)
-          </button>
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-400">
+          <span>Klik di mana saja pada peta atau cari alamat untuk menempatkan pin</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => updatePosition(SELARU_LAT, SELARU_LON)}
+              className="hover:text-indigo-400 underline"
+            >
+              Selaru (Bandung)
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => updatePosition(JAKARTA_LAT, JAKARTA_LON)}
+              className="hover:text-rose-400 underline"
+            >
+              Monas (Jakarta)
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+          <Lock className="w-3 h-3 text-emerald-400" />
+          <span>Titik GPS tersimpan di database dan tidak dapat diedit saat dalam mode lihat lokasi.</span>
+        </div>
+      )}
     </div>
   );
 }

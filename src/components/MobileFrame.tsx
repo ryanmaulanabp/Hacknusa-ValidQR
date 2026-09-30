@@ -65,7 +65,7 @@ export default function MobileFrame({ children }: MobileFrameProps) {
               </div>
 
               <div className="p-2.5 rounded-xl bg-white/5 border border-white/5">
-                <span className="font-bold text-emerald-400">Layer 3: GPS Geofencing (15m)</span>
+                <span className="font-bold text-emerald-400">Layer 3: GPS Geofencing (20m)</span>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Haversine distance check untuk memblokir Overlay Attack secara instan.
                 </p>

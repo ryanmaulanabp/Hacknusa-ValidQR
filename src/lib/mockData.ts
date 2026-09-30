@@ -150,7 +150,7 @@ export const DEMO_PRESETS = {
     city: 'BANDUNG',
     expectedColor: 'GREEN',
     expectedStatus: 'VERIFIED',
-    description: 'NMID terdaftar resmi, nama cocok 100%, lokasi GPS dalam radius 15m.',
+    description: 'NMID terdaftar resmi, nama cocok 100%, lokasi GPS dalam radius 20m.',
     rawPayload: buildDemoPayload('ID10293847561', 'WARUNG BAKSO PAK BUDI', 'BANDUNG'),
   },
   stickerB: {

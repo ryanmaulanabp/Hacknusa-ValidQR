@@ -110,7 +110,7 @@ export default function VerificationPopup({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
       <div
         className={`w-full max-w-md ${theme.bg} rounded-t-3xl sm:rounded-3xl border ${theme.border} text-white shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 duration-300`}
       >
@@ -257,7 +257,7 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      Layer 3: GPS Geofencing (15m)
+                      Layer 3: GPS Geofencing (20m)
                     </span>
                     {response.location_check === 'MATCH' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">

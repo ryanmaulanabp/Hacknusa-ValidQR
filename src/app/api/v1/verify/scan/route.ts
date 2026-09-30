@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const radiusMeters = parseInt(process.env.GEOFENCE_RADIUS_METERS || '15', 10);
+    const radiusMeters = parseInt(process.env.GEOFENCE_RADIUS_METERS || '20', 10);
     const fuzzyThreshold = parseInt(process.env.FUZZY_WARNING_THRESHOLD || '50', 10);
 
     // ────────────────────────────────────────────────────────────────────────

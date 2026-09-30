@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Merchant } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
@@ -19,6 +19,7 @@ import {
   Eye,
   Sparkles,
   ShieldCheck,
+  Lock,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -36,6 +37,10 @@ const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap')
 export default function MerchantPortalPage() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
+  const mapSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Read-only viewing mode state for existing merchants
+  const [viewingMerchant, setViewingMerchant] = useState<Merchant | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -78,6 +83,28 @@ export default function MerchantPortalPage() {
   useEffect(() => {
     fetchMerchants();
   }, []);
+
+  const handleSelectMerchantToView = (m: Merchant) => {
+    setViewingMerchant(m);
+    setName(m.name);
+    setCity(m.city || 'BANDUNG');
+    setNmid(m.nmid);
+    setLatitude(Number(m.latitude));
+    setLongitude(Number(m.longitude));
+    setWaNumber(m.wa_number || '6281234567890');
+    // Scroll smoothly to map container
+    mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleResetToCreate = () => {
+    setViewingMerchant(null);
+    setName('');
+    setCity('BANDUNG');
+    setNmid('');
+    setLatitude(SELARU_LAT);
+    setLongitude(SELARU_LON);
+    setWaNumber('6281234567890');
+  };
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,15 +222,77 @@ export default function MerchantPortalPage() {
         </div>
 
         {/* Form Generator & Interactive Map */}
-        <div className="p-6 rounded-3xl bg-[#101424] border border-white/10 space-y-6">
+        <div ref={mapSectionRef} className="p-6 rounded-3xl bg-[#101424] border border-white/10 space-y-6 scroll-mt-6">
+          {/* Banner Mode Lihat Lokasi (Read-Only) */}
+          {viewingMerchant && (
+            <div className="p-4 rounded-2xl bg-indigo-950/70 border border-indigo-500/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-500/30 shrink-0">
+                  <MapPin className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">Mode Lihat Lokasi GPS Merchant</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Read-Only (Terkunci)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Menampilkan titik GPS real-time &amp; perimeter Geofence 20m untuk <strong className="text-white">{viewingMerchant.name}</strong> ({Number(viewingMerchant.latitude).toFixed(6)}, {Number(viewingMerchant.longitude).toFixed(6)}).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedStickerMerchant({
+                      id: viewingMerchant.id,
+                      nmid: viewingMerchant.nmid,
+                      name: viewingMerchant.name,
+                      city: viewingMerchant.city,
+                      latitude: Number(viewingMerchant.latitude),
+                      longitude: Number(viewingMerchant.longitude),
+                      wa_number: viewingMerchant.wa_number,
+                    })
+                  }
+                  className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Buka Stiker QRIS</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetToCreate}
+                  className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Tambah Merchant Baru</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-4 h-4 text-emerald-400" />
-                Registrasi Merchant &amp; Generate Stiker QRIS
+                {viewingMerchant ? (
+                  <>
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                    <span>Lokasi GPS Realtime: {viewingMerchant.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span>Registrasi Merchant &amp; Generate Stiker QRIS</span>
+                  </>
+                )}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
-                Titik GPS yang Anda pilih pada peta di bawah akan menjadi batas perimeter geofence 15 meter
+                {viewingMerchant
+                  ? 'Titik GPS dan radius toleransi geofence 20 meter ditampilkan secara realtime pada peta di bawah (read-only).'
+                  : 'Titik GPS yang Anda pilih pada peta di bawah akan menjadi batas perimeter geofence 20 meter'}
               </p>
             </div>
           </div>
@@ -216,10 +305,15 @@ export default function MerchantPortalPage() {
                 <input
                   type="text"
                   required
+                  disabled={!!viewingMerchant}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Contoh: WARUNG BAKSO PAK BUDI"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                    viewingMerchant
+                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                      : 'border-white/10 text-white focus:border-indigo-500'
+                  } text-xs focus:outline-none`}
                 />
               </div>
 
@@ -227,10 +321,15 @@ export default function MerchantPortalPage() {
                 <label className="block text-slate-300 mb-1.5 font-semibold">Kota Merchant</label>
                 <input
                   type="text"
+                  disabled={!!viewingMerchant}
                   value={city}
                   onChange={e => setCity(e.target.value)}
                   placeholder="BANDUNG"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                    viewingMerchant
+                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                      : 'border-white/10 text-white focus:border-indigo-500'
+                  } text-xs focus:outline-none`}
                 />
               </div>
             </div>
@@ -242,10 +341,15 @@ export default function MerchantPortalPage() {
                 </label>
                 <input
                   type="text"
+                  disabled={!!viewingMerchant}
                   value={nmid}
                   onChange={e => setNmid(e.target.value)}
                   placeholder="Contoh: ID10293847561"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                    viewingMerchant
+                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                      : 'border-white/10 text-white focus:border-indigo-500'
+                  } font-mono text-xs focus:outline-none`}
                 />
               </div>
 
@@ -253,31 +357,48 @@ export default function MerchantPortalPage() {
                 <label className="block text-slate-300 mb-1.5 font-semibold">Nomor WhatsApp Alert (Anti-Fraud)</label>
                 <input
                   type="text"
+                  disabled={!!viewingMerchant}
                   value={waNumber}
                   onChange={e => setWaNumber(e.target.value)}
                   placeholder="6281234567890"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                    viewingMerchant
+                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                      : 'border-white/10 text-white focus:border-indigo-500'
+                  } text-xs focus:outline-none`}
                 />
               </div>
             </div>
 
             {/* ── Leaflet Interactive Map Picker ── */}
             <div className="space-y-2 pt-2">
-              <label className="block text-slate-300 font-bold flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-emerald-400" />
-                Pilih Lokasi Merchant pada Peta (Leaflet Geofence)
+              <label className="block text-slate-300 font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-emerald-400" />
+                  {viewingMerchant
+                    ? `Lokasi GPS Terdaftar (Geofence 20m • Read-Only)`
+                    : `Pilih Lokasi Merchant pada Peta (Leaflet Geofence 20m)`}
+                </span>
+                {viewingMerchant && (
+                  <span className="text-[10px] text-emerald-300 font-normal flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Peta Terkunci
+                  </span>
+                )}
               </label>
 
               <LocationPickerMap
                 latitude={latitude}
                 longitude={longitude}
                 onChange={(lat, lon) => {
+                  if (viewingMerchant) return;
                   setLatitude(lat);
                   setLongitude(lon);
                 }}
                 height="320px"
-                geofenceRadius={15}
-                merchantName={name || 'Merchant Baru'}
+                geofenceRadius={20}
+                merchantName={name || 'Merchant'}
+                readOnly={!!viewingMerchant}
+                hideOverlays={!!selectedStickerMerchant}
               />
 
               <div className="grid grid-cols-2 gap-4 pt-1">
@@ -286,9 +407,14 @@ export default function MerchantPortalPage() {
                   <input
                     type="number"
                     step="any"
+                    disabled={!!viewingMerchant}
                     value={latitude}
                     onChange={e => setLatitude(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl bg-[#181B2F] border ${
+                      viewingMerchant
+                        ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                        : 'border-white/10 text-white focus:border-indigo-500'
+                    } font-mono text-xs focus:outline-none`}
                   />
                 </div>
                 <div>
@@ -296,30 +422,67 @@ export default function MerchantPortalPage() {
                   <input
                     type="number"
                     step="any"
+                    disabled={!!viewingMerchant}
                     value={longitude}
                     onChange={e => setLongitude(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl bg-[#181B2F] border ${
+                      viewingMerchant
+                        ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                        : 'border-white/10 text-white focus:border-indigo-500'
+                    } font-mono text-xs focus:outline-none`}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit / Action Buttons */}
             <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <span>Sedang Membuat Stiker QRIS...</span>
-                ) : (
-                  <>
+              {viewingMerchant ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedStickerMerchant({
+                        id: viewingMerchant.id,
+                        nmid: viewingMerchant.nmid,
+                        name: viewingMerchant.name,
+                        city: viewingMerchant.city,
+                        latitude: Number(viewingMerchant.latitude),
+                        longitude: Number(viewingMerchant.longitude),
+                        wa_number: viewingMerchant.wa_number,
+                      })
+                    }
+                    className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                  >
                     <QrCode className="w-4 h-4" />
-                    <span>Generate &amp; Tampilkan Stiker QRIS</span>
-                  </>
-                )}
-              </button>
+                    <span>Lihat / Cetak Stiker QRIS</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleResetToCreate}
+                    className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/10 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-400" />
+                    <span>Buat Merchant Baru</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                >
+                  {isSubmitting ? (
+                    <span>Sedang Membuat Stiker QRIS...</span>
+                  ) : (
+                    <>
+                      <QrCode className="w-4 h-4" />
+                      <span>Generate &amp; Tampilkan Stiker QRIS</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -330,7 +493,7 @@ export default function MerchantPortalPage() {
             <div>
               <h2 className="text-sm font-bold text-white">Daftar Merchant Terdaftar ({merchants.length})</h2>
               <p className="text-xs text-slate-400">
-                Klik tombol &quot;Lihat Stiker&quot; pada baris mana saja untuk mencetak atau mengunduh QRIS
+                Klik baris merchant mana saja untuk melihat titik lokasi GPS di peta secara realtime (Read-Only)
               </p>
             </div>
           </div>
@@ -345,19 +508,23 @@ export default function MerchantPortalPage() {
                   <th className="py-2.5 px-3">Kota</th>
                   <th className="py-2.5 px-3">Koordinat (Lat, Lon)</th>
                   <th className="py-2.5 px-3">Geofence</th>
-                  <th className="py-2.5 px-3 text-right">Aksi Stiker &amp; Hapus</th>
+                  <th className="py-2.5 px-3 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {merchants.map(m => {
                   const hasConflict = nmidCounts[m.nmid] > 1;
+                  const isSelected = viewingMerchant?.id === m.id;
 
                   return (
                     <tr
                       key={m.id}
-                      className={`hover:bg-white/5 transition-colors ${
-                        hasConflict ? 'bg-amber-950/20' : ''
-                      }`}
+                      onClick={() => handleSelectMerchantToView(m)}
+                      className={`cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-indigo-950/60 border-l-4 border-indigo-500'
+                          : 'hover:bg-white/5'
+                      } ${hasConflict ? 'bg-amber-950/20' : ''}`}
                     >
                       <td className="py-3 px-3 font-mono text-slate-400">{m.id}</td>
                       <td className="py-3 px-3 font-mono font-bold text-indigo-300">
@@ -368,7 +535,16 @@ export default function MerchantPortalPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-3 font-semibold text-white">{m.name}</td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5 font-semibold text-white">
+                          <span>{m.name}</span>
+                          {isSelected && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Aktif di Peta
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-3 text-slate-300">{m.city || 'BANDUNG'}</td>
                       <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
                         {Number(m.latitude).toFixed(5)}, {Number(m.longitude).toFixed(5)}
@@ -376,13 +552,34 @@ export default function MerchantPortalPage() {
                       <td className="py-3 px-3">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
                           <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                          <span>±15m</span>
+                          <span>±20m</span>
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Tombol Lihat Lokasi GPS Realtime */}
                           <button
-                            onClick={() =>
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectMerchantToView(m);
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg font-semibold text-[11px] border flex items-center gap-1 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                                : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                            title="Tampilkan Titik GPS di Peta (Read-Only)"
+                          >
+                            <MapPin className="w-3 h-3" />
+                            <span>{isSelected ? 'Sedang Dilihat' : 'Lokasi GPS'}</span>
+                          </button>
+
+                          {/* Tombol Lihat Stiker QRIS */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedStickerMerchant({
                                 id: m.id,
                                 nmid: m.nmid,
@@ -392,18 +589,23 @@ export default function MerchantPortalPage() {
                                 longitude: Number(m.longitude),
                                 hasConflict,
                                 wa_number: m.wa_number,
-                              })
-                            }
-                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all"
+                              });
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
                             title="Lihat / Cetak Stiker QRIS"
                           >
                             <QrCode className="w-3 h-3" />
-                            <span>Lihat Stiker</span>
+                            <span>Stiker</span>
                           </button>
 
+                          {/* Tombol Hapus */}
                           <button
-                            onClick={() => handleDeleteMerchant(m.id)}
-                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMerchant(m.id);
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
                             title="Hapus Merchant"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

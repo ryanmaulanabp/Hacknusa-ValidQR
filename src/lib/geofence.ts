@@ -36,7 +36,7 @@ export const checkGeofence = (
   userLon: number | null | undefined,
   merchantLat: number,
   merchantLon: number,
-  radiusMeters: number = 15 // Default 15m as per mobile app & hackathon demo
+  radiusMeters: number = 20 // Default 20m as per mobile app & hackathon demo
 ): GeofenceResult => {
   if (userLat == null || userLon == null || isNaN(userLat) || isNaN(userLon)) {
     return {

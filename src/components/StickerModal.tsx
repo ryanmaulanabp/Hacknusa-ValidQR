@@ -93,7 +93,7 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
       <div className="relative w-full max-w-md my-auto bg-[#0E1122] rounded-3xl border border-white/15 shadow-2xl overflow-hidden flex flex-col">
         {/* Modal Top Bar */}
         <div className="px-5 py-4 flex items-center justify-between border-b border-white/10 bg-[#12162A]">
@@ -176,7 +176,7 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
             <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>ValidQR Geofence: Radius 15m</span>
+                <span>ValidQR Geofence: Radius 20m</span>
               </div>
 
               {merchant.latitude && merchant.longitude && (

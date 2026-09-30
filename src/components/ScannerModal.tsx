@@ -455,7 +455,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md">
       <div className="relative w-full max-w-md h-full max-h-[92vh] flex flex-col bg-[#0B0D1B] rounded-3xl overflow-hidden shadow-2xl border border-white/10">
         {/* Header Bar */}
         <div className="px-5 py-4 flex items-center justify-between z-20 bg-gradient-to-b from-[#0B0D1B] to-transparent">
@@ -678,7 +678,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                   setGpsStatus(`Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
                 }}
                 height="250px"
-                geofenceRadius={15}
+                geofenceRadius={20}
                 merchantName="Titik Scan Pengguna"
               />
             </div>

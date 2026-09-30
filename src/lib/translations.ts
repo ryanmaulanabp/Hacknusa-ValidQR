@@ -20,8 +20,8 @@ export const translations: Record<string, Record<LanguageCode, string>> = {
   // ── ValidQR Shield ──
   shield_title: { id: 'ValidQR Shield Aktif', en: 'ValidQR Shield Active' },
   shield_desc: {
-    id: 'Perlindungan Geofence GPS 15m & Anti-Overlay QRIS',
-    en: '15m GPS Geofence & QRIS Anti-Overlay Protected',
+    id: 'Perlindungan Geofence GPS 20m & Anti-Overlay QRIS',
+    en: '20m GPS Geofence & QRIS Anti-Overlay Protected',
   },
   shield_status: { id: 'Adaptive 3-Layer Security', en: 'Adaptive 3-Layer Security' },
 
@@ -191,8 +191,8 @@ export const translations: Record<string, Record<LanguageCode, string>> = {
     en: 'Protected by ValidQR AI Shield',
   },
   shield_verified_desc: {
-    id: 'Geofence GPS 15m & Integritas NMID Terverifikasi',
-    en: '15m GPS Geofence & NMID Integrity Verified',
+    id: 'Geofence GPS 20m & Integritas NMID Terverifikasi',
+    en: '20m GPS Geofence & NMID Integrity Verified',
   },
   btn_back_home: { id: 'Kembali ke Beranda', en: 'Back to Home' },
 };
