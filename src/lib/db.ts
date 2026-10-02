@@ -209,6 +209,45 @@ export async function deleteMerchant(id: number): Promise<boolean> {
 }
 
 /**
+ * Update merchant details (e.g. WhatsApp number)
+ */
+export async function updateMerchant(
+  id: number,
+  data: { wa_number?: string | null; name?: string; latitude?: number; longitude?: number }
+): Promise<Merchant | null> {
+  if (pool) {
+    try {
+      const res = await pool.query(
+        `UPDATE merchants
+         SET wa_number = COALESCE($2, wa_number),
+             name = COALESCE($3, name),
+             latitude = COALESCE($4, latitude),
+             longitude = COALESCE($5, longitude),
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [id, data.wa_number, data.name, data.latitude, data.longitude]
+      );
+      if (res.rows.length > 0) return mapMerchantRow(res.rows[0]);
+    } catch (err) {
+      console.error('[DB Update Error, using memory fallback]:', err);
+    }
+  }
+
+  const mem = getMemoryMerchants();
+  const idx = mem.findIndex(m => m.id === id);
+  if (idx !== -1) {
+    if (data.wa_number !== undefined) mem[idx].wa_number = data.wa_number;
+    if (data.name !== undefined) mem[idx].name = data.name;
+    if (data.latitude !== undefined) mem[idx].latitude = data.latitude;
+    if (data.longitude !== undefined) mem[idx].longitude = data.longitude;
+    mem[idx].updated_at = new Date().toISOString();
+    return mem[idx];
+  }
+  return null;
+}
+
+/**
  * Log incident to audit table
  */
 export async function logIncident(data: {

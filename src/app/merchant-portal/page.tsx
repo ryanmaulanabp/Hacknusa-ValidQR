@@ -49,8 +49,9 @@ export default function MerchantPortalPage() {
   const [nmid, setNmid] = useState('');
   const [latitude, setLatitude] = useState(SELARU_LAT);
   const [longitude, setLongitude] = useState(SELARU_LON);
-  const [waNumber, setWaNumber] = useState('081224990680');
+  const [waNumber, setWaNumber] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdatingWa, setIsUpdatingWa] = useState(false);
 
   // WhatsApp Gateway State
   const [waTesting, setWaTesting] = useState(false);
@@ -108,7 +109,7 @@ export default function MerchantPortalPage() {
   }, []);
 
   const handleTestWhatsApp = async (phoneToTest?: string) => {
-    const target = phoneToTest || waNumber || '081224990680';
+    const target = phoneToTest || waNumber.trim() || process.env.NEXT_PUBLIC_WHATSAPP_TARGET || '081224990680';
     setWaTesting(true);
     setWaTestResult(null);
     try {
@@ -132,6 +133,30 @@ export default function MerchantPortalPage() {
     }
   };
 
+  const handleUpdateWaNumber = async () => {
+    if (!viewingMerchant) return;
+    setIsUpdatingWa(true);
+    try {
+      const res = await fetch(`/api/v1/merchants/${viewingMerchant.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wa_number: waNumber.trim() || null }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWaTestResult({ success: true, message: `Nomor WhatsApp ${viewingMerchant.name} berhasil diperbarui!` });
+        fetchMerchants();
+      } else {
+        setWaTestResult({ success: false, message: data.error || 'Gagal update nomor WA' });
+      }
+    } catch (err: any) {
+      setWaTestResult({ success: false, message: err.message || 'Error update nomor WA' });
+    } finally {
+      setIsUpdatingWa(false);
+      setTimeout(() => setWaTestResult(null), 6000);
+    }
+  };
+
   const handleSelectMerchantToView = (m: Merchant) => {
     setViewingMerchant(m);
     setName(m.name);
@@ -139,7 +164,7 @@ export default function MerchantPortalPage() {
     setNmid(m.nmid);
     setLatitude(Number(m.latitude));
     setLongitude(Number(m.longitude));
-    setWaNumber(m.wa_number || '081224990680');
+    setWaNumber(m.wa_number || '');
     // Scroll smoothly to map container
     mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -151,7 +176,7 @@ export default function MerchantPortalPage() {
     setNmid('');
     setLatitude(SELARU_LAT);
     setLongitude(SELARU_LON);
-    setWaNumber('081224990680');
+    setWaNumber('');
   };
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
@@ -409,26 +434,33 @@ export default function MerchantPortalPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert (Anti-Fraud)</label>
-                  <span className="text-[10px] text-emerald-400 font-mono">Fonnte API Connected</span>
+                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert (Anti-Fraud Toko Ini)</label>
+                  <span className="text-[10px] text-emerald-400 font-mono">Fonnte Gateway</span>
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    disabled={!!viewingMerchant}
                     value={waNumber}
                     onChange={e => setWaNumber(e.target.value)}
-                    placeholder="081224990680"
-                    className={`flex-1 px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
-                      viewingMerchant
-                        ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
-                        : 'border-white/10 text-white focus:border-indigo-500'
-                    } text-xs focus:outline-none`}
+                    placeholder="Contoh: 081234567890 (Nomor WhatsApp Merchant)"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:border-indigo-500 text-xs focus:outline-none"
                   />
+                  {viewingMerchant && (
+                    <button
+                      type="button"
+                      onClick={handleUpdateWaNumber}
+                      disabled={isUpdatingWa || !waNumber.trim()}
+                      className="px-3 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0 shadow-sm"
+                      title="Simpan perubahan nomor WhatsApp merchant ini"
+                    >
+                      {isUpdatingWa ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                      <span>{isUpdatingWa ? 'Menyimpan...' : 'Update WA'}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleTestWhatsApp(waNumber)}
-                    disabled={waTesting}
+                    disabled={waTesting || !waNumber.trim()}
                     className="px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0 shadow-sm"
                     title="Kirim pesan uji coba ke nomor ini via Fonnte Gateway"
                   >
@@ -440,6 +472,9 @@ export default function MerchantPortalPage() {
                     <span>{waTesting ? 'Mengirim...' : 'Test Notif WA'}</span>
                   </button>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 Setiap merchant memiliki nomor WhatsApp sendiri. Peringatan fraud akan otomatis terkirim langsung ke nomor WhatsApp toko ini.
+                </p>
                 {waTestResult && (
                   <p className={`text-[11px] mt-1.5 font-medium ${waTestResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {waTestResult.message}
@@ -583,6 +618,7 @@ export default function MerchantPortalPage() {
                   <th className="py-2.5 px-3">ID</th>
                   <th className="py-2.5 px-3">NMID</th>
                   <th className="py-2.5 px-3">Nama Merchant</th>
+                  <th className="py-2.5 px-3">WhatsApp Alert</th>
                   <th className="py-2.5 px-3">Kota</th>
                   <th className="py-2.5 px-3">Koordinat (Lat, Lon)</th>
                   <th className="py-2.5 px-3">Geofence</th>
@@ -623,6 +659,15 @@ export default function MerchantPortalPage() {
                           )}
                         </div>
                       </td>
+                      <td className="py-3 px-3">
+                        {m.wa_number ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                            <span>{m.wa_number}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-[10px] italic">Default Admin</span>
+                        )}
+                      </td>
                       <td className="py-3 px-3 text-slate-300">{m.city || 'BANDUNG'}</td>
                       <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
                         {Number(m.latitude).toFixed(5)}, {Number(m.longitude).toFixed(5)}
@@ -635,6 +680,20 @@ export default function MerchantPortalPage() {
                       </td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Tombol Test WA langsung ke nomor merchant */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTestWhatsApp(m.wa_number || undefined);
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                            title={`Kirim Test WA ke ${m.wa_number || 'Nomor Admin'}`}
+                          >
+                            <Send className="w-3 h-3" />
+                            <span>Test WA</span>
+                          </button>
+
                           {/* Tombol Lihat Lokasi GPS Realtime */}
                           <button
                             type="button"
