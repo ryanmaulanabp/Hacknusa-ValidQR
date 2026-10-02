@@ -17,7 +17,7 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     city: 'BANDUNG',
     latitude: SELARU_LAT,
     longitude: SELARU_LON,
-    wa_number: '6281234567890',
+    wa_number: '081224990680',
     is_active: true,
     is_auto_registered: false,
     created_at: new Date('2026-09-01T08:00:00Z').toISOString(),

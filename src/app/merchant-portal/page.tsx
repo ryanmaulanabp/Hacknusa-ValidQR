@@ -20,6 +20,7 @@ import {
   Sparkles,
   ShieldCheck,
   Lock,
+  Send,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -48,8 +49,13 @@ export default function MerchantPortalPage() {
   const [nmid, setNmid] = useState('');
   const [latitude, setLatitude] = useState(SELARU_LAT);
   const [longitude, setLongitude] = useState(SELARU_LON);
-  const [waNumber, setWaNumber] = useState('6281234567890');
+  const [waNumber, setWaNumber] = useState('081224990680');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // WhatsApp Gateway State
+  const [waTesting, setWaTesting] = useState(false);
+  const [waTestResult, setWaTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [waDeviceStatus, setWaDeviceStatus] = useState<{ connected: boolean; device?: string; quota?: string } | null>(null);
 
   // Sticker Modal State
   const [selectedStickerMerchant, setSelectedStickerMerchant] = useState<{
@@ -80,9 +86,51 @@ export default function MerchantPortalPage() {
     }
   };
 
+  const fetchWaStatus = async () => {
+    try {
+      const res = await fetch('/api/v1/notify');
+      const data = await res.json();
+      if (data.success) {
+        setWaDeviceStatus({
+          connected: data.connected,
+          device: data.device,
+          quota: data.quota,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch WA status', err);
+    }
+  };
+
   useEffect(() => {
     fetchMerchants();
+    fetchWaStatus();
   }, []);
+
+  const handleTestWhatsApp = async (phoneToTest?: string) => {
+    const target = phoneToTest || waNumber || '081224990680';
+    setWaTesting(true);
+    setWaTestResult(null);
+    try {
+      const res = await fetch('/api/v1/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', targetPhone: target }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWaTestResult({ success: true, message: `Pesan uji coba berhasil terkirim ke WhatsApp (${target})!` });
+        fetchWaStatus();
+      } else {
+        setWaTestResult({ success: false, message: data.message || 'Gagal mengirim pesan uji coba.' });
+      }
+    } catch (err: any) {
+      setWaTestResult({ success: false, message: err.message || 'Koneksi error.' });
+    } finally {
+      setWaTesting(false);
+      setTimeout(() => setWaTestResult(null), 8000);
+    }
+  };
 
   const handleSelectMerchantToView = (m: Merchant) => {
     setViewingMerchant(m);
@@ -91,7 +139,7 @@ export default function MerchantPortalPage() {
     setNmid(m.nmid);
     setLatitude(Number(m.latitude));
     setLongitude(Number(m.longitude));
-    setWaNumber(m.wa_number || '6281234567890');
+    setWaNumber(m.wa_number || '081224990680');
     // Scroll smoothly to map container
     mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -103,7 +151,7 @@ export default function MerchantPortalPage() {
     setNmid('');
     setLatitude(SELARU_LAT);
     setLongitude(SELARU_LON);
-    setWaNumber('6281234567890');
+    setWaNumber('081224990680');
   };
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
@@ -198,6 +246,12 @@ export default function MerchantPortalPage() {
               <p className="text-xs text-slate-400 mt-0.5">
                 Pilih lokasi merchant dengan Leaflet, generate stiker QRIS, dan kelola database
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>WhatsApp Anti-Fraud Gateway: {waDeviceStatus?.connected ? 'Terhubung Aktif' : 'Tersambung'} ({waDeviceStatus?.device || '081224990680'})</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -354,19 +408,43 @@ export default function MerchantPortalPage() {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1.5 font-semibold">Nomor WhatsApp Alert (Anti-Fraud)</label>
-                <input
-                  type="text"
-                  disabled={!!viewingMerchant}
-                  value={waNumber}
-                  onChange={e => setWaNumber(e.target.value)}
-                  placeholder="6281234567890"
-                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
-                    viewingMerchant
-                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
-                      : 'border-white/10 text-white focus:border-indigo-500'
-                  } text-xs focus:outline-none`}
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert (Anti-Fraud)</label>
+                  <span className="text-[10px] text-emerald-400 font-mono">Fonnte API Connected</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    disabled={!!viewingMerchant}
+                    value={waNumber}
+                    onChange={e => setWaNumber(e.target.value)}
+                    placeholder="081224990680"
+                    className={`flex-1 px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                      viewingMerchant
+                        ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                        : 'border-white/10 text-white focus:border-indigo-500'
+                    } text-xs focus:outline-none`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleTestWhatsApp(waNumber)}
+                    disabled={waTesting}
+                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0 shadow-sm"
+                    title="Kirim pesan uji coba ke nomor ini via Fonnte Gateway"
+                  >
+                    {waTesting ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    <span>{waTesting ? 'Mengirim...' : 'Test Notif WA'}</span>
+                  </button>
+                </div>
+                {waTestResult && (
+                  <p className={`text-[11px] mt-1.5 font-medium ${waTestResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {waTestResult.message}
+                  </p>
+                )}
               </div>
             </div>
 

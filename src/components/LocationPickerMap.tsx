@@ -456,8 +456,11 @@ export default function LocationPickerMap({
   };
 
   // ── Address / Place Search (Nominatim OSM) ──────────────────────────
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e?: React.FormEvent | React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
@@ -501,15 +504,29 @@ export default function LocationPickerMap({
               <span className="truncate font-medium">Mode Lihat: Lokasi GPS Terkunci ({merchantName})</span>
             </div>
           ) : (
-            <form onSubmit={handleSearch} className="relative flex-1">
+            <div className="relative flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSearch(e);
+                  }
+                }}
                 placeholder="Cari gedung / jalan / alamat toko..."
                 className="w-full pl-8 pr-7 py-2 rounded-xl bg-[#181B2F] border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 shadow-inner"
               />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <button
+                type="button"
+                onClick={handleSearch}
+                className="absolute left-2.5 top-2.5 text-slate-400 hover:text-white"
+                title="Cari Alamat"
+              >
+                <Search className="w-3.5 h-3.5" />
+              </button>
               {searchQuery && (
                 <button
                   type="button"
@@ -522,7 +539,7 @@ export default function LocationPickerMap({
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
-            </form>
+            </div>
           )}
 
           {/* Satellite Layer Toggle */}
