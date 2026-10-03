@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import QRCode from 'qrcode';
-import { createMerchant, getMerchantsByNmid } from '@/lib/db';
+import { createMerchant, getMerchantsByNmid, checkRegistrationCollision } from '@/lib/db';
 import { buildDemoPayload } from '@/lib/mockData';
 
 export async function POST(req: NextRequest) {
@@ -21,6 +21,21 @@ export async function POST(req: NextRequest) {
 
     if (!nmid) {
       nmid = `ID${Math.floor(Math.random() * 10000000000).toString().padStart(10, '0')}`;
+    }
+
+    // Zero-Tolerance Registration Guard:
+    // Reject registering any merchant/sticker inside an existing EXCLUSIVE_STATIC perimeter!
+    const collision = await checkRegistrationCollision(latitude, longitude);
+    if (collision.hasCollision && collision.exclusiveMerchant) {
+      const em = collision.exclusiveMerchant;
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Pendaftaran Stiker DITOLAK MUTLAK (Zero-Tolerance)! Koordinat berjarak ${collision.distanceMeters}m, berada di dalam radius (${em.radius_meters}m) Zona Statis Eksklusif "${em.name}". Tidak ada QR lain yang diizinkan beroperasi di zona ini demi pencegahan penipuan QRIS!`,
+          code: 'EXCLUSIVE_ZONE_COLLISION',
+        },
+        { status: 409 }
+      );
     }
 
     const security_mode = body.security_mode || 'DYNAMIC';

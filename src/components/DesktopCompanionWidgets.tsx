@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Store,
   ExternalLink,
+  MapPin,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -238,6 +239,30 @@ export default function DesktopCompanionWidgets({
               </div>
             </div>
             <ArrowRight className="w-4 h-4 text-indigo-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Preset H: QR Masjid Tanpa GPS (Zero-Tolerance: BLOCKED) */}
+          <button
+            onClick={() => onRunPreset(DEMO_PRESETS.stickerMasjidNoGps)}
+            className="w-full p-3 rounded-2xl bg-amber-950/30 hover:bg-amber-900/40 border border-amber-500/30 text-left transition-all flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <MapPin className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+                  <span>Stiker H: QR Masjid Tanpa GPS</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                    Wajib GPS
+                  </span>
+                </div>
+                <div className="text-[10px] text-amber-400 font-mono">
+                  GPS Mati/Off · BLOCKED (Zero-Tolerance)
+                </div>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
           </button>
         </div>
       </div>

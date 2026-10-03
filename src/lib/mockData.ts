@@ -267,4 +267,18 @@ export const DEMO_PRESETS = {
     description: 'Hanya berjarak 3 meter dari Bakso Pak Budi (Food Court). Kedua pedagang tetap aman dan tidak saling memblokir!',
     rawPayload: buildDemoPayload('ID10293847555', 'KANTIN BU JOKO SELARU', 'BANDUNG'),
   },
+  stickerMasjidNoGps: {
+    id: 'MASJID_NO_GPS',
+    label: 'Stiker H: QR Masjid Tanpa GPS (Zero-Tolerance: BLOCKED)',
+    nmid: 'ID10293847999',
+    merchantName: 'DKM MASJID SYAMSUL ULUM',
+    city: 'BANDUNG',
+    userLat: null,
+    userLon: null,
+    expectedColor: 'RED',
+    expectedStatus: 'BLOCKED',
+    description: 'Scan QR resmi Masjid tetapi GPS smartphone mati/denied. Otomatis DIBLOKIR karena Mode Statis Eksklusif mewajibkan GPS aktif tanpa toleransi!',
+    rawPayload: buildDemoPayload('ID10293847999', 'DKM MASJID SYAMSUL ULUM', 'BANDUNG'),
+  },
 };
+

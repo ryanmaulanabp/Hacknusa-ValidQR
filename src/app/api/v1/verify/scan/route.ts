@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { parseQRIS } from '@/lib/emvco';
 import { fuzzyMatch } from '@/lib/fuzzy';
 import { checkGeofence } from '@/lib/geofence';
-import { getMerchantsByNmid, createMerchant, logIncident, checkExclusiveZoneCollision } from '@/lib/db';
+import { getMerchantsByNmid, createMerchant, logIncident, checkExclusiveZoneCollision, checkRegistrationCollision } from '@/lib/db';
 import { sendFraudAlert } from '@/lib/whatsapp';
 import { ScanResponse } from '@/lib/types';
 
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
         const response: ScanResponse = {
           status: 'BLOCKED',
           color: 'RED',
-          message: `🚨 Terdeteksi Pelanggaran Zona Statis! Lokasi ini adalah area khusus ${catLabel} (${em.name}) yang hanya mengizinkan 1 QR resmi. QR lain otomatis diblokir demi keamanan!`,
+          message: `🚨 Transaksi DITOLAK MUTLAK (Zero-Tolerance)! Lokasi ini adalah area khusus ${catLabel} (${em.name}) yang menerapkan Single-QR Isolation. Semua QR lain di sekitar lokasi ini dilarang bertransaksi dan diblokir total!`,
           reason: 'EXCLUSIVE_ZONE_VIOLATION',
           nmid,
           nmid_valid: false,
@@ -129,7 +129,69 @@ export async function POST(req: NextRequest) {
     let autoRegistered = false;
 
     if (merchants.length === 0) {
-      // Auto-register merchant if not found
+      // Zero-Tolerance Check: If scanning an unknown QR at coordinates within an EXCLUSIVE_STATIC perimeter,
+      // REJECT IMMEDIATELY — NEVER auto-register a rogue QR inside an exclusive static area!
+      if (gpsAvailable) {
+        const regCheck = await checkRegistrationCollision(Number(userLat), Number(userLon));
+        if (regCheck.hasCollision && regCheck.exclusiveMerchant) {
+          const em = regCheck.exclusiveMerchant;
+          console.warn(`[ValidQR] 🚨 ZERO-TOLERANCE BLOCK: Unregistered QR ${nmid} scanned inside ${em.name}`);
+
+          sendFraudAlert({
+            nmid,
+            suspectedMerchantName: scannedName || 'QR Liar / Tidak Terdaftar',
+            buyerLocation: { latitude: Number(userLat), longitude: Number(userLon) },
+            timestamp: new Date().toISOString(),
+            distanceMeters: regCheck.distanceMeters,
+            reason: 'EXCLUSIVE_ZONE_VIOLATION',
+            targetPhone: em.wa_number || undefined,
+          }).catch(console.error);
+
+          const incident = await logIncident({
+            nmid_scanned: nmid,
+            merchant_name: scannedName || `QR Liar Tidak Terdaftar di ${em.name}`,
+            status: 'BLOCKED',
+            color: 'RED',
+            reason: 'EXCLUSIVE_ZONE_VIOLATION',
+            fuzzy_score: 0,
+            latitude: Number(userLat),
+            longitude: Number(userLon),
+            distance_meters: regCheck.distanceMeters,
+            gps_available: true,
+            raw_payload: rawPayload || undefined,
+          });
+
+          return NextResponse.json({
+            status: 'BLOCKED',
+            color: 'RED',
+            message: `🚨 Transaksi DITOLAK MUTLAK: Terdeteksi QR tidak sah di dalam Zona Statis Eksklusif "${em.name}". Lokasi ini menerapkan aturan Zero-Tolerance (hanya 1 QR resmi berizin)!`,
+            reason: 'EXCLUSIVE_ZONE_VIOLATION',
+            nmid,
+            nmid_valid: false,
+            matched_name: em.name,
+            merchant_city: em.city,
+            location_check: 'MISMATCH',
+            distance_meters: regCheck.distanceMeters,
+            duration_seconds: 1,
+            calculation_method: 'HAVERSINE',
+            geofence_radius: em.radius_meters || 50,
+            fuzzy_score: 0,
+            fuzzy_algorithm: 'zero_tolerance_exclusive_guard',
+            scanned_name: scannedName,
+            auto_registered: false,
+            gps_checked: true,
+            conflict_count: 1,
+            conflict_names: [{ id: em.id, name: em.name }],
+            incident_id: incident.id,
+            security_mode: 'EXCLUSIVE_STATIC',
+            zone_category: em.zone_category,
+            exclusive_zone_detected: true,
+            exclusive_merchant_name: em.name,
+          });
+        }
+      }
+
+      // Auto-register merchant if not found and safe
       const regLat = gpsAvailable ? Number(userLat) : -6.974021;
       const regLon = gpsAvailable ? Number(userLon) : 107.630342;
       const newMerchant = await createMerchant({
@@ -152,7 +214,52 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────────────────────────────────
     const primaryMerchant = merchants[0];
     const registeredName = primaryMerchant.name;
+    const isExclusiveStatic = primaryMerchant.security_mode === 'EXCLUSIVE_STATIC';
     const effectiveRadius = primaryMerchant.radius_meters || defaultRadiusMeters;
+
+    // Zero-Tolerance: GPS MANDATORY for EXCLUSIVE_STATIC transactions
+    if (isExclusiveStatic && !gpsAvailable) {
+      console.warn(`[ValidQR] 🚨 GPS REQUIRED for EXCLUSIVE_STATIC: ${registeredName}`);
+      const incident = await logIncident({
+        nmid_scanned: nmid,
+        merchant_name: scannedName || registeredName,
+        status: 'BLOCKED',
+        color: 'RED',
+        reason: 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE',
+        fuzzy_score: 0,
+        gps_available: false,
+        raw_payload: rawPayload || undefined,
+      });
+
+      return NextResponse.json({
+        status: 'BLOCKED',
+        color: 'RED',
+        message: `🛑 Transaksi Ditolak Mutlak: Lokasi ini adalah Zona Statis Eksklusif (${registeredName}) dengan kebijakan Zero-Tolerance. GPS aktif WAJIB disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi!`,
+        reason: 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE',
+        nmid,
+        nmid_valid: true,
+        matched_name: registeredName,
+        merchant_city: primaryMerchant.city,
+        location_check: 'SKIPPED',
+        distance_meters: null,
+        duration_seconds: 1,
+        calculation_method: 'HAVERSINE',
+        geofence_radius: effectiveRadius,
+        fuzzy_score: 0,
+        fuzzy_algorithm: 'strict_gps_required',
+        scanned_name: scannedName,
+        auto_registered: false,
+        gps_checked: false,
+        conflict_count: merchants.length,
+        conflict_names: merchants.map(m => ({ id: m.id, name: m.name })),
+        incident_id: incident.id,
+        security_mode: 'EXCLUSIVE_STATIC',
+        zone_category: primaryMerchant.zone_category || 'TEMPAT_IBADAH',
+        exclusive_zone_detected: true,
+        exclusive_merchant_name: registeredName,
+      });
+    }
+
     const { score: fuzzyScore, debug: fuzzyDebug } = fuzzyMatch(scannedName, registeredName);
 
     // ────────────────────────────────────────────────────────────────────────
@@ -173,9 +280,10 @@ export async function POST(req: NextRequest) {
     // LAYER 1 & GEOFENCE GUARD:
     // If distance exceeds radius -> IMMEDIATE HARD BLOCK (RED)
     // Exception: If distance is within device's reported GPS uncertainty margin (indoor/weak signal),
-    // handle gracefully as SOFT_WARNING (YELLOW) rather than falsely accusing of an overlay attack.
+    // only handled as SOFT_WARNING for DYNAMIC merchants. For EXCLUSIVE_STATIC: Zero-Tolerance!
     // ────────────────────────────────────────────────────────────────────────
     const isWithinAccuracyBuffer =
+      !isExclusiveStatic &&
       userAccuracy !== null &&
       userAccuracy > effectiveRadius &&
       distanceMeters !== null &&
@@ -214,7 +322,9 @@ export async function POST(req: NextRequest) {
         const response: ScanResponse = {
           status: 'BLOCKED',
           color: 'RED',
-          message: 'Lokasi Anda tidak sesuai dengan merchant terdaftar. Kemungkinan overlay attack.',
+          message: isExclusiveStatic
+            ? `🚨 Batas Perimeter Terlampaui (Zero-Tolerance): Jarak Anda (${distanceMeters}m) berada di luar batas (${effectiveRadius}m) ${registeredName}. Transaksi diblokir demi perlindungan fisik QRIS!`
+            : 'Lokasi Anda tidak sesuai dengan merchant terdaftar. Kemungkinan overlay attack.',
           reason: 'LOCATION_MISMATCH',
           nmid,
           nmid_valid: true,

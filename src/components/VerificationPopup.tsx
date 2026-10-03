@@ -42,14 +42,16 @@ export default function VerificationPopup({
   if (!isOpen || !response) return null;
 
   const isExclusiveViolation = response.reason === 'EXCLUSIVE_ZONE_VIOLATION';
+  const isGpsRequired = response.reason === 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE';
   const isBlocked =
     isExclusiveViolation ||
+    isGpsRequired ||
     response.status === 'BLOCKED' ||
     response.status === 'HARD_BLOCK' ||
     response.color.toUpperCase() === 'RED' ||
     response.location_check === 'MISMATCH';
 
-  const isGpsSkipped = response.location_check === 'SKIPPED';
+  const isGpsSkipped = response.location_check === 'SKIPPED' && !isGpsRequired;
   const isFuzzyWarn = response.fuzzy_score < 100;
   const isWarning = !isBlocked && (response.status === 'REBRAND_WARNING' || response.status === 'SOFT_WARNING' || isGpsSkipped);
   const isVerified = !isBlocked && !isWarning;
@@ -65,18 +67,26 @@ export default function VerificationPopup({
         accentBtn: 'bg-rose-600 hover:bg-rose-700 text-white',
         iconBg: 'bg-rose-500/20 text-rose-500',
         badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-        kicker: isExclusiveViolation ? '🚨 PELANGGARAN ZONA STATIS' : t('kicker_blocked'),
+        kicker: isExclusiveViolation
+          ? '🚨 ZERO-TOLERANCE PERIMETER'
+          : isGpsRequired
+          ? '📍 GPS WAJIB AKTIF (ZERO-TOLERANCE)'
+          : t('kicker_blocked'),
         title: isExclusiveViolation
-          ? 'TRANSAKSI DIBLOKIR: QR LIAR'
+          ? 'TRANSAKSI DITOLAK: QR LIAR / TIDAK SAH'
+          : isGpsRequired
+          ? 'TRANSAKSI DITOLAK: GPS WAJIB AKTIF'
           : !response.nmid_valid
           ? t('title_unregistered')
           : t('title_blocked'),
         subtitle: isExclusiveViolation
-          ? `Area ini adalah Zona Statis Eksklusif (${response.matched_name || 'Tempat Ibadah/RS'}). Hanya 1 QR resmi yang diizinkan di perimeter ini!`
+          ? `Area ini menerapkan isolasi mutlak (Zero-Tolerance). Semua QR lain di sekitar area ${response.matched_name || 'Statis Eksklusif'} dilarang bertransaksi dan diblokir total!`
+          : isGpsRequired
+          ? `Area ${response.matched_name || 'Statis Eksklusif'} menerapkan kebijakan Zero-Tolerance. GPS aktif dan akurat wajib disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi.`
           : !response.nmid_valid
           ? t('sub_unregistered')
           : t('sub_blocked_overlay'),
-        icon: ShieldBan,
+        icon: isGpsRequired ? MapPin : ShieldBan,
       }
     : isWarning
     ? {

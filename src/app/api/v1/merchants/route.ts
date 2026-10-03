@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllMerchants, createMerchant } from '@/lib/db';
+import { getAllMerchants, createMerchant, checkRegistrationCollision } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -27,6 +27,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Name, latitude, and longitude are required' },
         { status: 400 }
+      );
+    }
+
+    // Zero-Tolerance Registration Guard:
+    // Reject registering any merchant inside an existing EXCLUSIVE_STATIC perimeter!
+    const collision = await checkRegistrationCollision(latitude, longitude);
+    if (collision.hasCollision && collision.exclusiveMerchant) {
+      const em = collision.exclusiveMerchant;
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Pendaftaran DITOLAK MUTLAK (Zero-Tolerance)! Titik koordinat berjarak ${collision.distanceMeters}m dan berada di dalam radius (${em.radius_meters}m) Zona Statis Eksklusif "${em.name}". Tidak ada merchant lain yang diizinkan beroperasi di zona ini demi pencegahan penipuan QRIS!`,
+          code: 'EXCLUSIVE_ZONE_REGISTRATION_FORBIDDEN',
+          exclusiveMerchant: {
+            id: em.id,
+            name: em.name,
+            radius_meters: em.radius_meters,
+            distance_meters: collision.distanceMeters,
+          },
+        },
+        { status: 409 }
       );
     }
 

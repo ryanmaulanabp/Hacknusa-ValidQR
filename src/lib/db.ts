@@ -429,3 +429,42 @@ export async function checkExclusiveZoneCollision(
 
   return { hasCollision: false };
 }
+
+/**
+ * Check if given coordinates fall inside any existing active EXCLUSIVE_STATIC merchant zone.
+ * Zero-Tolerance policy: strictly forbids registering any other merchant inside an exclusive static perimeter.
+ */
+export async function checkRegistrationCollision(
+  lat: number | null | undefined,
+  lon: number | null | undefined,
+  excludeMerchantId?: number
+): Promise<{
+  hasCollision: boolean;
+  exclusiveMerchant?: Merchant;
+  distanceMeters?: number;
+}> {
+  if (lat == null || lon == null || isNaN(Number(lat)) || isNaN(Number(lon))) {
+    return { hasCollision: false };
+  }
+
+  const allMerchants = await getAllMerchants();
+  const exclusiveMerchants = allMerchants.filter(
+    m => m.is_active && m.security_mode === 'EXCLUSIVE_STATIC' && (excludeMerchantId ? m.id !== excludeMerchantId : true)
+  );
+
+  for (const em of exclusiveMerchants) {
+    const dist = haversineDistanceMeters(Number(lat), Number(lon), em.latitude, em.longitude);
+    const radius = em.radius_meters || 50;
+
+    // Strict 0-Meter Cutoff: if dist <= radius, collision!
+    if (dist <= radius) {
+      return {
+        hasCollision: true,
+        exclusiveMerchant: em,
+        distanceMeters: Math.round(dist),
+      };
+    }
+  }
+
+  return { hasCollision: false };
+}

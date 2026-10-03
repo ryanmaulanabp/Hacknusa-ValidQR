@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Merchant, SecurityMode, ZoneCategory } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
+import { haversineDistanceMeters } from '@/lib/geofence';
 import StickerModal from '@/components/StickerModal';
 import {
   Store,
@@ -190,9 +191,33 @@ export default function MerchantPortalPage() {
     setRadiusMeters(20);
   };
 
+  // Zero-Tolerance Check: Check if current pin is within an active EXCLUSIVE_STATIC zone
+  const exclusiveConflict = useMemo(() => {
+    if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) return null;
+    if (viewingMerchant) return null; // When viewing an existing merchant, don't flag self
+
+    for (const m of merchants) {
+      if (m.is_active && m.security_mode === 'EXCLUSIVE_STATIC') {
+        const dist = haversineDistanceMeters(latitude, longitude, m.latitude, m.longitude);
+        const rad = m.radius_meters || 50;
+        // Strict 0-Meter Cutoff: if inside radius, conflict!
+        if (dist <= rad) {
+          return { merchant: m, distance: Math.round(dist), radius: rad };
+        }
+      }
+    }
+    return null;
+  }, [latitude, longitude, merchants, viewingMerchant]);
+
   const handleGenerateSticker = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) return alert('Nama merchant wajib diisi');
+
+    if (exclusiveConflict) {
+      return alert(
+        `🛑 Pendaftaran DITOLAK MUTLAK (Zero-Tolerance):\n\nTitik lokasi berada di dalam perimeter eksklusif "${exclusiveConflict.merchant.name}" (${exclusiveConflict.distance}m dari pusat, radius ${exclusiveConflict.radius}m).\n\nTidak boleh ada merchant atau QR lain yang beroperasi di zona ini demi keamanan fisik QRIS!`
+      );
+    }
 
     setIsSubmitting(true);
     try {
@@ -725,6 +750,24 @@ export default function MerchantPortalPage() {
               </div>
             </div>
 
+            {/* Zero-Tolerance Exclusive Zone Conflict Warning */}
+            {exclusiveConflict && (
+              <div className="p-4 rounded-2xl bg-rose-950/70 border border-rose-500/50 flex items-start gap-3 text-rose-200 shadow-lg">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <div className="font-extrabold text-white flex items-center gap-1.5">
+                    <span>🛑 Pelanggaran Perimeter Zero-Tolerance</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-rose-500/30 text-rose-200 rounded-full border border-rose-500/40 font-bold uppercase tracking-wider">
+                      Dilarang Mutlak
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Koordinat pin terpilih berjarak <strong>{exclusiveConflict.distance}m</strong>, berada di dalam radius <strong>{exclusiveConflict.radius}m</strong> Zona Statis Eksklusif <strong className="text-white">{exclusiveConflict.merchant.name}</strong>. Pendaftaran merchant atau stiker QR baru di perimeter ini dilarang demi keamanan fisik QRIS!
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Submit / Action Buttons */}
             <div className="pt-2">
               {viewingMerchant ? (
@@ -760,11 +803,20 @@ export default function MerchantPortalPage() {
               ) : (
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
+                  disabled={isSubmitting || !!exclusiveConflict}
+                  className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${
+                    exclusiveConflict
+                      ? 'bg-rose-950/60 text-rose-300 border border-rose-500/40 cursor-not-allowed shadow-none'
+                      : 'bg-gradient-to-r from-[#6C5CE7] to-[#8E7BFD] hover:opacity-95 text-white shadow-lg shadow-indigo-600/30 cursor-pointer'
+                  }`}
                 >
                   {isSubmitting ? (
                     <span>Sedang Membuat Stiker QRIS...</span>
+                  ) : exclusiveConflict ? (
+                    <>
+                      <ShieldAlert className="w-4 h-4 text-rose-400" />
+                      <span>Ditolak: Masuk Perimeter Zona Statis ({exclusiveConflict.merchant.name})</span>
+                    </>
                   ) : (
                     <>
                       <QrCode className="w-4 h-4" />
