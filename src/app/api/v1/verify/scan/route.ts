@@ -40,6 +40,50 @@ export async function POST(req: NextRequest) {
     const fuzzyThreshold = parseInt(process.env.FUZZY_WARNING_THRESHOLD || '50', 10);
 
     // ────────────────────────────────────────────────────────────────────────
+    // MANDATORY GPS GUARD:
+    // Akses pembayaran QRIS WAJIB menyertakan koordinat GPS aktif!
+    // Jika GPS tidak tersedia / dimatikan, transaksi langsung ditolak (HARD BLOCK).
+    // ────────────────────────────────────────────────────────────────────────
+    if (!gpsAvailable) {
+      console.warn(`[ValidQR] 🚨 ACCESS BLOCKED: GPS is mandatory for scan verification! NMID: ${nmid}`);
+
+      const incident = await logIncident({
+        nmid_scanned: nmid,
+        merchant_name: scannedName || 'Unknown Merchant',
+        status: 'BLOCKED',
+        color: 'RED',
+        reason: 'GPS_REQUIRED',
+        fuzzy_score: 0,
+        gps_available: false,
+        raw_payload: rawPayload || undefined,
+      });
+
+      const response: ScanResponse = {
+        status: 'BLOCKED',
+        color: 'RED',
+        message: '🛑 Akses Ditolak: Pembayaran QRIS mewajibkan GPS aktif untuk memvalidasi lokasi fisik merchant demi perlindungan anti-fraud.',
+        reason: 'GPS_REQUIRED',
+        nmid,
+        nmid_valid: true,
+        matched_name: scannedName || 'Merchant QRIS',
+        merchant_city: 'BANDUNG',
+        location_check: 'SKIPPED',
+        distance_meters: null,
+        duration_seconds: 0,
+        calculation_method: 'HAVERSINE',
+        geofence_radius: defaultRadiusMeters,
+        fuzzy_score: 0,
+        fuzzy_algorithm: 'gps_mandatory_gate',
+        scanned_name: scannedName,
+        auto_registered: false,
+        gps_checked: false,
+        incident_id: incident.id,
+      };
+
+      return NextResponse.json(response);
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // Step 0: EXCLUSIVE STATIC ZONE GUARD (Tempat Ibadah, RS, Kawasan Khusus)
     // Jika koordinat buyer berada di dalam radius merchant Mode Statis Eksklusif,
     // HANYA QR milik merchant tersebut yang diizinkan!

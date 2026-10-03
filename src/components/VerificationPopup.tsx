@@ -42,7 +42,7 @@ export default function VerificationPopup({
   if (!isOpen || !response) return null;
 
   const isExclusiveViolation = response.reason === 'EXCLUSIVE_ZONE_VIOLATION';
-  const isGpsRequired = response.reason === 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE';
+  const isGpsRequired = response.reason === 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE' || response.reason === 'GPS_REQUIRED';
   const isBlocked =
     isExclusiveViolation ||
     isGpsRequired ||
@@ -70,19 +70,21 @@ export default function VerificationPopup({
         kicker: isExclusiveViolation
           ? '🚨 ZERO-TOLERANCE PERIMETER'
           : isGpsRequired
-          ? '📍 GPS WAJIB AKTIF (ZERO-TOLERANCE)'
+          ? '📍 GPS WAJIB AKTIF'
           : t('kicker_blocked'),
         title: isExclusiveViolation
           ? 'TRANSAKSI DITOLAK: QR LIAR / TIDAK SAH'
           : isGpsRequired
-          ? 'TRANSAKSI DITOLAK: GPS WAJIB AKTIF'
+          ? 'PEMBAYARAN DITOLAK: GPS WAJIB AKTIF'
           : !response.nmid_valid
           ? t('title_unregistered')
           : t('title_blocked'),
         subtitle: isExclusiveViolation
           ? `Area ini menerapkan isolasi mutlak (Zero-Tolerance). Semua QR lain di sekitar area ${response.matched_name || 'Statis Eksklusif'} dilarang bertransaksi dan diblokir total!`
           : isGpsRequired
-          ? `Area ${response.matched_name || 'Statis Eksklusif'} menerapkan kebijakan Zero-Tolerance. GPS aktif dan akurat wajib disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi.`
+          ? response.reason === 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE'
+            ? `Area ${response.matched_name || 'Statis Eksklusif'} menerapkan kebijakan Zero-Tolerance. GPS aktif dan akurat wajib disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi.`
+            : 'Sistem anti-fraud ValidQR mewajibkan GPS aktif pada perangkat Anda untuk memvalidasi keberadaan fisik merchant demi mencegah penipuan QRIS.'
           : !response.nmid_valid
           ? t('sub_unregistered')
           : t('sub_blocked_overlay'),

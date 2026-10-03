@@ -19,6 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  ShieldAlert,
+  Lock,
 } from 'lucide-react';
 
 const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap'), {
@@ -42,10 +44,13 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  type GpsGateState = 'CHECKING' | 'GRANTED' | 'DENIED' | 'OFF' | 'UNSUPPORTED';
+
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [showMapPicker, setShowMapPicker] = useState(false);
+  const [gpsState, setGpsState] = useState<GpsGateState>('CHECKING');
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [gpsStatus, setGpsStatus] = useState<string>('Menghubungkan GPS satelit...');
@@ -59,28 +64,67 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const lastScanTimeRef = useRef<number>(0);
   const barcodeDetectorRef = useRef<any>(null);
 
+  // ── Fungsi Request Izin & Kunci GPS ─────────────────────────────────
+  const requestGpsPermission = useCallback(() => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      setGpsState('UNSUPPORTED');
+      setGpsStatus('Browser tidak mendukung Geolocation');
+      setGpsLocation(null);
+      setGpsAccuracy(null);
+      return;
+    }
+
+    setGpsState('CHECKING');
+    setGpsStatus('Mencari sinyal GPS satelit...');
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const acc = Math.round(pos.coords.accuracy);
+        setGpsLocation({ lat, lon });
+        setGpsAccuracy(acc);
+        setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+        setGpsState('GRANTED');
+      },
+      err => {
+        console.warn('GPS Request Error:', err);
+        if (err.code === 1) {
+          // PERMISSION_DENIED
+          setGpsState('DENIED');
+          setGpsStatus('Izin lokasi ditolak browser');
+        } else {
+          setGpsState('OFF');
+          setGpsStatus('Sinyal GPS mati atau tidak terdeteksi');
+        }
+        setGpsLocation(null);
+        setGpsAccuracy(null);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
+  }, []);
+
+  // ── Preset Demo Lokasi (Untuk Evaluasi Desktop/Juri tanpa GPS Fisik) ─
+  const activateDemoLocation = useCallback(() => {
+    setUseRealGps(false);
+    setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
+    setGpsAccuracy(1);
+    setGpsStatus('Demo Telkom Univ (-6.974021, 107.630342)');
+    setGpsState('GRANTED');
+  }, []);
+
   // ── GPS Streaming Real-Time (watchPosition) ─────────────────────────
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setGpsState('CHECKING');
+      setGpsLocation(null);
+      return;
+    }
 
     let watchId: number | null = null;
 
     if (useRealGps && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      setGpsStatus('Mencari sinyal GPS satelit...');
-
-      // Immediate hardware kickstart to avoid delay
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          const acc = Math.round(pos.coords.accuracy);
-          setGpsLocation({ lat, lon });
-          setGpsAccuracy(acc);
-          setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
-      );
+      requestGpsPermission();
 
       watchId = navigator.geolocation.watchPosition(
         pos => {
@@ -91,11 +135,18 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           setGpsLocation({ lat, lon });
           setGpsAccuracy(acc);
           setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+          setGpsState('GRANTED');
         },
         err => {
-          console.warn('GPS Stream Error:', err);
-          setGpsStatus('GPS ditolak/tidak aktif: Fallback Selaru');
-          setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
+          console.warn('GPS Stream Watch Error:', err);
+          if (err.code === 1) {
+            setGpsState('DENIED');
+            setGpsStatus('Izin lokasi ditolak browser');
+          } else {
+            setGpsState('OFF');
+            setGpsStatus('Sinyal GPS mati');
+          }
+          setGpsLocation(null);
           setGpsAccuracy(null);
         },
         {
@@ -108,7 +159,8 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
       if (!gpsLocation) {
         setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
         setGpsStatus('Gedung Selaru (-6.974021, 107.630342)');
-        setGpsAccuracy(0);
+        setGpsAccuracy(1);
+        setGpsState('GRANTED');
       }
     }
 
@@ -117,7 +169,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [isOpen, useRealGps]);
+  }, [isOpen, useRealGps, requestGpsPermission]);
 
   const stopCamera = useCallback(() => {
     if (animationFrameRef.current) {
@@ -225,9 +277,9 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     }
   }, [facingMode, stopCamera]);
 
-  // Start Camera Stream when modal opens or camera flips
+  // Start Camera Stream when modal opens or camera flips (ONLY if GPS is GRANTED)
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || gpsState !== 'GRANTED') {
       stopCamera();
       return;
     }
@@ -237,7 +289,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     return () => {
       stopCamera();
     };
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen, gpsState, startCamera, stopCamera]);
 
   const switchCamera = () => {
     setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
@@ -397,6 +449,11 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (gpsState !== 'GRANTED' || !gpsLocation) {
+      alert('Akses Ditolak: GPS wajib aktif untuk memverifikasi QRIS! Silakan nyalakan GPS atau gunakan lokasi demo terlebih dahulu.');
+      return;
+    }
+
     // Reset input so user can pick the same file again if needed
     e.target.value = '';
 
@@ -466,23 +523,20 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold">{t('scan_title')}</h2>
-                {useRealGps && gpsAccuracy !== null ? (
-                  <span className={`flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                    gpsAccuracy <= 20
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${gpsAccuracy <= 20 ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
-                    ±{gpsAccuracy}m {gpsAccuracy <= 20 ? 'Akurat' : 'Lemah'}
+                {gpsState === 'GRANTED' ? (
+                  <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {useRealGps && gpsAccuracy !== null ? `±${gpsAccuracy}m Akurat` : 'GPS Aktif'}
                   </span>
                 ) : (
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    {useRealGps ? 'GPS Lock' : 'Titik Peta'}
+                  <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
+                    GPS Terkunci
                   </span>
                 )}
               </div>
               <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
-                <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                <MapPin className={`w-3 h-3 shrink-0 ${gpsState === 'GRANTED' ? 'text-emerald-400' : 'text-rose-400'}`} />
                 <span className="line-clamp-1 font-mono">{gpsStatus}</span>
               </div>
             </div>
@@ -518,62 +572,129 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
 
         {/* Camera Viewfinder Area */}
         <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-          {/* Live Video */}
-          <video
-            ref={videoRef}
-            className="absolute inset-0 w-full h-full object-cover"
-            playsInline
-            muted
-          />
-
-          {/* Fallback placeholder if camera not active */}
-          {!isScanning && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-[#0E1120]">
-              <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-3">
-                <Camera className="w-8 h-8" />
+          {gpsState !== 'GRANTED' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-30 bg-gradient-to-b from-[#0E1120] via-[#090B16] to-[#0E1120]">
+              <div className="relative mb-4">
+                <div className={`w-20 h-20 rounded-2xl flex items-center justify-center border shadow-xl ${
+                  gpsState === 'CHECKING'
+                    ? 'bg-indigo-950/60 border-indigo-500/40 shadow-indigo-500/10 animate-pulse'
+                    : 'bg-rose-950/60 border-rose-500/40 shadow-rose-500/10'
+                }`}>
+                  {gpsState === 'CHECKING' ? (
+                    <RefreshCw className="w-9 h-9 text-indigo-400 animate-spin" />
+                  ) : (
+                    <ShieldAlert className="w-10 h-10 text-rose-500 animate-bounce" />
+                  )}
+                </div>
+                <div className={`absolute -bottom-1 -right-1 p-1.5 rounded-full border border-black/40 text-white ${
+                  gpsState === 'CHECKING' ? 'bg-indigo-600' : 'bg-rose-600'
+                }`}>
+                  <MapPin className="w-3.5 h-3.5" />
+                </div>
               </div>
-              <p className="text-xs text-slate-300 max-w-xs">
-                {errorMessage || 'Akses kamera sedang dipersiapkan. Anda juga dapat menggunakan tombol Upload Foto.'}
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-bold tracking-wide uppercase mb-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                GPS Wajib Aktif (Zero-Trust Gate)
+              </div>
+
+              <h3 className="text-base font-bold text-white mb-2">
+                {gpsState === 'CHECKING'
+                  ? 'Menghubungkan Sinyal GPS...'
+                  : gpsState === 'DENIED'
+                  ? 'Izin Akses GPS Ditolak Browser'
+                  : gpsState === 'UNSUPPORTED'
+                  ? 'Perangkat Tidak Mendukung GPS'
+                  : 'Sinyal GPS Mati / Tidak Terdeteksi'}
+              </h3>
+
+              <p className="text-xs text-slate-300 max-w-xs leading-relaxed mb-6">
+                ValidQR menerapkan perlindungan ketat Geofence. Kamera scanner hanya terbuka jika GPS aktif untuk memvalidasi posisi fisik merchant dan memblokir QR palsu/tempelan.
               </p>
-              <button
-                onClick={startCamera}
-                className="mt-3 px-3 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 shadow"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Coba Nyalakan Kamera
-              </button>
-            </div>
-          )}
 
-          {/* Viewfinder Target Overlay */}
-          <div className="relative z-10 w-64 h-64 border-2 border-indigo-400/80 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(108,92,231,0.5)]">
-            {/* Viewfinder Corners */}
-            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-[#6C5CE7] rounded-tl-xl" />
-            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-[#6C5CE7] rounded-tr-xl" />
-            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-[#6C5CE7] rounded-bl-xl" />
-            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-[#6C5CE7] rounded-br-xl" />
+              <div className="w-full max-w-xs space-y-2.5">
+                <button
+                  onClick={requestGpsPermission}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>{gpsState === 'DENIED' ? 'Minta Izin GPS Ulang' : 'Nyalakan & Coba Lagi'}</span>
+                </button>
 
-            {/* Red / Laser Scanner Line Animation */}
-            <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7675] to-transparent shadow-[0_0_12px_#FF7675] animate-laser" />
-          </div>
-
-          {/* Processing spinner indicator */}
-          {isProcessing && (
-            <div className="absolute inset-0 bg-black/75 z-30 flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
-              <div className="text-white font-bold text-sm tracking-wide">
-                ValidQR AI Memeriksa 3-Layer...
+                <button
+                  onClick={activateDemoLocation}
+                  className="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-200 hover:text-white text-xs font-medium flex items-center justify-center gap-2 transition-all active:scale-95"
+                  title="Gunakan lokasi Telkom University untuk pengujian di laptop/desktop tanpa GPS fisik"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Gunakan Lokasi Demo (Telkom University)</span>
+                </button>
               </div>
-              <div className="text-xs text-indigo-300">
-                NMID • Fuzzy Match • Geofence GPS
-              </div>
-            </div>
-          )}
 
-          <div className="absolute bottom-4 left-0 right-0 text-center z-10 px-4">
-            <span className="text-xs text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md">
-              {t('scan_hint')}
-            </span>
-          </div>
+              <p className="text-[10px] text-slate-400 mt-4 max-w-xs">
+                *Bagi penguji / juri pada perangkat laptop tanpa GPS, silakan klik tombol lokasi demo di atas.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Live Video */}
+              <video
+                ref={videoRef}
+                className="absolute inset-0 w-full h-full object-cover"
+                playsInline
+                muted
+              />
+
+              {/* Fallback placeholder if camera not active */}
+              {!isScanning && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10 bg-[#0E1120]">
+                  <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mb-3">
+                    <Camera className="w-8 h-8" />
+                  </div>
+                  <p className="text-xs text-slate-300 max-w-xs">
+                    {errorMessage || 'Akses kamera sedang dipersiapkan. Anda juga dapat menggunakan tombol Upload Foto.'}
+                  </p>
+                  <button
+                    onClick={startCamera}
+                    className="mt-3 px-3 py-1.5 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Coba Nyalakan Kamera
+                  </button>
+                </div>
+              )}
+
+              {/* Viewfinder Target Overlay */}
+              <div className="relative z-10 w-64 h-64 border-2 border-indigo-400/80 rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(108,92,231,0.5)]">
+                {/* Viewfinder Corners */}
+                <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-[#6C5CE7] rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-[#6C5CE7] rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-[#6C5CE7] rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-[#6C5CE7] rounded-br-xl" />
+
+                {/* Red / Laser Scanner Line Animation */}
+                <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-[#FF7675] to-transparent shadow-[0_0_12px_#FF7675] animate-laser" />
+              </div>
+
+              {/* Processing spinner indicator */}
+              {isProcessing && (
+                <div className="absolute inset-0 bg-black/75 z-30 flex flex-col items-center justify-center gap-3">
+                  <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
+                  <div className="text-white font-bold text-sm tracking-wide">
+                    ValidQR AI Memeriksa 3-Layer...
+                  </div>
+                  <div className="text-xs text-indigo-300">
+                    NMID • Fuzzy Match • Geofence GPS
+                  </div>
+                </div>
+              )}
+
+              <div className="absolute bottom-4 left-0 right-0 text-center z-10 px-4">
+                <span className="text-xs text-white/90 bg-black/60 px-3 py-1 rounded-full backdrop-blur-md">
+                  {t('scan_hint')}
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Bottom Action Sheet: Gallery & Presets */}
@@ -615,26 +736,10 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
               onClick={() => {
                 setShowMapPicker(false);
                 setUseRealGps(true);
-                if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-                  setGpsStatus('Menyegarkan GPS satelit...');
-                  navigator.geolocation.getCurrentPosition(
-                    pos => {
-                      const lat = pos.coords.latitude;
-                      const lon = pos.coords.longitude;
-                      const acc = Math.round(pos.coords.accuracy);
-                      setGpsLocation({ lat, lon });
-                      setGpsAccuracy(acc);
-                      setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-                    },
-                    err => {
-                      console.warn('GPS refresh error:', err);
-                    },
-                    { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
-                  );
-                }
+                requestGpsPermission();
               }}
               className={`py-2.5 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 border transition-all ${
-                useRealGps && !showMapPicker
+                useRealGps && !showMapPicker && gpsState === 'GRANTED'
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
                   : 'bg-white/10 text-slate-300 border-white/10'
               }`}
@@ -676,6 +781,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                   setGpsLocation({ lat, lon });
                   setGpsAccuracy(1);
                   setGpsStatus(`Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+                  setGpsState('GRANTED');
                 }}
                 height="250px"
                 geofenceRadius={20}
