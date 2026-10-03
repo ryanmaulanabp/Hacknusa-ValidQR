@@ -186,18 +186,63 @@ export default function MerchantPortalPage() {
   const SAMPLE_STORE_PHOTO = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80';
   const SAMPLE_PRODUCT_PHOTO = 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=600&q=80';
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+  const compressImage = (file: File, maxDim = 800, quality = 0.82): Promise<{ dataUrl: string; sizeKb: number }> => {
+    return new Promise((resolve, reject) => {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      if (!validTypes.includes(file.type.toLowerCase())) {
+        reject(new Error('Format file tidak didukung! Harap gunakan format gambar resmi (JPG, PNG, atau WebP).'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Gagal membaca berkas gambar.'));
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Format file gambar rusak atau tidak terbaca.'));
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            const rawUrl = e.target?.result as string;
+            resolve({ dataUrl: rawUrl, sizeKb: Math.round(rawUrl.length / 1024) });
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          const sizeKb = Math.round((compressedDataUrl.length * 3) / 4 / 1024);
+          resolve({ dataUrl: compressedDataUrl, sizeKb });
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      alert('Ukuran foto maksimal 3MB!');
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Ukuran berkas asal melebihi batas 8MB!');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setter(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { dataUrl } = await compressImage(file, 800, 0.82);
+      setter(dataUrl);
+    } catch (err: any) {
+      alert(err.message || 'Gagal memproses gambar');
+    }
   };
 
   const handleSelectMerchantToView = (m: Merchant) => {

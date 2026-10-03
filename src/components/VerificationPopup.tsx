@@ -21,6 +21,12 @@ import {
   Store,
   Sparkles,
   QrCode,
+  Eye,
+  Flag,
+  ImageIcon,
+  FileText,
+  Check,
+  Package,
 } from 'lucide-react';
 
 interface VerificationPopupProps {
@@ -40,6 +46,9 @@ export default function VerificationPopup({
 }: VerificationPopupProps) {
   const { t } = useApp();
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(true);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [isReportingMismatch, setIsReportingMismatch] = useState(false);
+  const [reportedAsMismatch, setReportedAsMismatch] = useState(false);
 
   if (!isOpen || !response) return null;
 
@@ -141,6 +150,86 @@ export default function VerificationPopup({
     if (score >= 50) return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
     return 'text-rose-400 bg-rose-500/10 border-rose-500/30';
   };
+
+  const handleReportMismatch = async () => {
+    if (!confirm('Apakah fisik toko atau barang di depan Anda benar-benar TIDAK SESUAI dengan foto database resmi? Laporan ini akan membatalkan transaksi dan dicatat ke log audit anti-fraud ValidQR.')) return;
+
+    setIsReportingMismatch(true);
+    try {
+      await fetch('/api/v1/incidents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nmid: response.nmid,
+          merchant_name: response.matched_name || response.scanned_name,
+          status: 'BLOCKED',
+          color: 'RED',
+          reason: 'SUSPECTED_FAKE_STORE',
+          fuzzy_score: response.fuzzy_score,
+          distance_meters: response.distance_meters,
+          gps_available: response.gps_checked,
+          raw_payload: payload?.rawPayload,
+        }),
+      });
+      setReportedAsMismatch(true);
+      setShowPhotoModal(false);
+    } catch (err) {
+      console.error('Failed to report mismatch', err);
+      setReportedAsMismatch(true);
+      setShowPhotoModal(false);
+    } finally {
+      setIsReportingMismatch(false);
+    }
+  };
+
+  if (reportedAsMismatch) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-sm p-0 sm:p-4">
+        <div className="w-full max-w-md bg-[#190909] rounded-t-3xl sm:rounded-3xl border border-rose-600/50 text-white shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-500 flex items-center justify-center border border-rose-500/30">
+              <ShieldAlert className="w-7 h-7" />
+            </div>
+            <div>
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                🚨 LAPORAN DUGAAN FRAUD DITERIMA
+              </span>
+              <h2 className="text-base font-black text-white mt-1">
+                TRANSAKSI DIBATALKAN DEMI KEAMANAN
+              </h2>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[#291010] border border-rose-500/30 text-xs text-rose-200 space-y-2">
+            <p className="leading-relaxed">
+              Anda melaporkan bahwa <strong>foto fisik toko atau produk di hadapan Anda berbeda</strong> dengan berkas terdaftar pada sistem ValidQR untuk merchant <strong>{response.matched_name || response.scanned_name}</strong>.
+            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Laporan ini telah disimpan ke sistem audit keamanan anti-fraud. Pembayaran Anda dibatalkan secara aman tanpa pemotongan saldo.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2 text-xs">
+            <div className="font-bold text-amber-300 flex items-center gap-1.5">
+              <span>💡 Tips Pencegahan Penipuan QRIS:</span>
+            </div>
+            <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-1">
+              <li>Jangan melakukan transfer manual jika diarahkan ke rekening pribadi orang lain.</li>
+              <li>Waspadai stiker QR yang ditempel menutupi kode QR akrilik resmi toko.</li>
+              <li>Tanyakan kepada staf/pemilik toko resmi mengenai keaslian kode QR tersebut.</li>
+            </ul>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="w-full py-3.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-lg transition-all cursor-pointer"
+          >
+            Tutup &amp; Batalkan Pembayaran
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
@@ -270,6 +359,84 @@ export default function VerificationPopup({
               <span>{response.merchant_city || 'BANDUNG'}</span>
               <span>•</span>
               <span className="text-emerald-400">ValidQR Protected</span>
+            </div>
+          </div>
+
+          {/* ── Visual Store & Product Verification Card ── */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#12162A] to-[#181E38] border border-indigo-500/30 space-y-2.5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Verifikasi Visual Foto Toko</span>
+              </span>
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                <CheckCircle2 className="w-2.5 h-2.5" /> Database Resmi
+              </span>
+            </div>
+
+            {/* Thumbnail Preview Row */}
+            <div className="flex items-center gap-2.5 bg-black/40 p-2 rounded-xl border border-white/5">
+              <div className="relative w-16 h-14 rounded-lg overflow-hidden shrink-0 bg-slate-800 border border-white/10">
+                {response.store_photo_url ? (
+                  <img
+                    src={response.store_photo_url}
+                    alt="Foto Toko"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-500">
+                    <ImageIcon className="w-5 h-5" />
+                  </div>
+                )}
+                <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-center text-slate-300 py-0.5 font-medium">
+                  Toko
+                </span>
+              </div>
+
+              {response.product_photo_url ? (
+                <div className="relative w-16 h-14 rounded-lg overflow-hidden shrink-0 bg-slate-800 border border-white/10">
+                  <img
+                    src={response.product_photo_url}
+                    alt="Foto Produk"
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-center text-slate-300 py-0.5 font-medium">
+                    Produk
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="flex-1 min-w-0 pr-1">
+                <p className="text-[11px] text-slate-300 line-clamp-2 leading-tight">
+                  {response.business_description || 'Cocokkan fisik etalase toko dan produk di depan Anda dengan foto resmi.'}
+                </p>
+                <span className="text-[10px] text-indigo-300 font-semibold mt-1 inline-flex items-center gap-1">
+                  🔍 Cek sebelum bayar
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons inside Card */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowPhotoModal(true)}
+                className="flex-1 py-2 px-3 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Periksa &amp; Cocokkan Fisik</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReportMismatch}
+                disabled={isReportingMismatch}
+                className="py-2 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[11px] font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer"
+                title="Laporkan jika toko berbeda"
+              >
+                <Flag className="w-3 h-3 text-rose-400" />
+                <span>Beda?</span>
+              </button>
             </div>
           </div>
 
@@ -430,6 +597,158 @@ export default function VerificationPopup({
           )}
         </div>
       </div>
+
+      {/* ── Modal Inspeksi Detail Foto Fisik Toko & Produk ── */}
+      {showPhotoModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-[#0F1326] rounded-3xl border border-white/20 text-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-5 py-4 flex items-center justify-between border-b border-white/10 bg-[#141829] shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                  <Store className="w-4 h-4 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Periksa Foto Fisik Toko &amp; Produk</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    NMID: {response.nmid} • {response.matched_name || response.scanned_name}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowPhotoModal(false)}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 flex items-start gap-2">
+                <Eye className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" />
+                <p className="leading-snug">
+                  Cocokkan fisik etalase toko dan produk yang Anda lihat langsung di hadapan Anda dengan foto resmi dari database ValidQR di bawah ini sebelum menyelesaikan pembayaran.
+                </p>
+              </div>
+
+              {/* Foto 1: Tempat Usaha Fisik */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-emerald-400" />
+                    1. Foto Tempat Usaha / Etalase Fisik
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-semibold">Tampak Depan</span>
+                </div>
+                <div className="w-full h-52 rounded-2xl overflow-hidden bg-slate-900 border border-white/10 relative group">
+                  {response.store_photo_url ? (
+                    <img
+                      src={response.store_photo_url}
+                      alt="Foto Toko Resmi"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1.5">
+                      <ImageIcon className="w-8 h-8 text-slate-600" />
+                      <span className="text-xs text-slate-400">Foto tempat usaha belum dilampirkan oleh penjual</span>
+                    </div>
+                  )}
+                  <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] text-emerald-300 font-medium">
+                    ✓ Data Resmi ValidQR
+                  </span>
+                </div>
+              </div>
+
+              {/* Foto 2: Produk / Hal yang Dijual */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-purple-400" />
+                    2. Foto Produk / Menu Jualan
+                  </span>
+                  <span className="text-[10px] text-purple-400 font-semibold">Barang Dagangan</span>
+                </div>
+                <div className="w-full h-52 rounded-2xl overflow-hidden bg-slate-900 border border-white/10 relative group">
+                  {response.product_photo_url ? (
+                    <img
+                      src={response.product_photo_url}
+                      alt="Foto Produk Resmi"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1.5">
+                      <Package className="w-8 h-8 text-slate-600" />
+                      <span className="text-xs text-slate-400">Foto katalog produk belum dilampirkan</span>
+                    </div>
+                  )}
+                  <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] text-purple-300 font-medium">
+                    ✓ Sampel Resmi
+                  </span>
+                </div>
+              </div>
+
+              {/* Rincian Hal yang Dijual */}
+              {response.business_description && (
+                <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-indigo-400" />
+                    Rincian Barang Dagangan Resmi
+                  </span>
+                  <p className="text-xs text-white leading-relaxed">
+                    {response.business_description}
+                  </p>
+                </div>
+              )}
+
+              {/* Checklist Keamanan */}
+              <div className="p-3.5 rounded-2xl bg-[#141829] border border-white/5 space-y-2 text-xs">
+                <span className="font-bold text-slate-200 block text-[11px]">
+                  Panduan Keamanan Sebelum Bayar:
+                </span>
+                <div className="space-y-1.5 text-[11px] text-slate-300">
+                  <div className="flex items-start gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Pastikan ciri fisik gerobak/toko/etalase di depan Anda mirip foto di atas.</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>Pastikan jenis barang/jasa yang Anda bayar sesuai dengan deskripsi resmi.</span>
+                  </div>
+                  <div className="flex items-start gap-1.5 text-rose-300">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                    <span>Bila stiker QR terlihat ditumpuk di atas kode lain atau kasir bukan orang resmi, jangan lanjutkan!</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 border-t border-white/10 bg-[#141829] flex flex-col sm:flex-row gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowPhotoModal(false)}
+                className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>✓ Fisik Toko Sesuai (Lanjut)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReportMismatch}
+                disabled={isReportingMismatch}
+                className="py-3 px-4 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Flag className="w-4 h-4 text-rose-400" />
+                <span>🚨 Laporkan Toko Berbeda</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

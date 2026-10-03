@@ -113,6 +113,9 @@ export async function POST(req: NextRequest) {
         qr_type: parsedQrType || (initialMerchants[0]?.qr_type) || 'STATIS',
         transaction_amount: parsedAmount ?? (initialMerchants[0]?.dynamic_amount) ?? null,
         invoice_number: parsedInvoice ?? null,
+        store_photo_url: initialMerchants[0]?.store_photo_url || null,
+        product_photo_url: initialMerchants[0]?.product_photo_url || null,
+        business_description: initialMerchants[0]?.business_description || null,
       };
 
       return NextResponse.json(response);
@@ -424,6 +427,9 @@ export async function POST(req: NextRequest) {
           incident_id: incident.id,
           security_mode: primaryMerchant.security_mode || 'DYNAMIC',
           zone_category: primaryMerchant.zone_category || 'UMKM',
+          store_photo_url: primaryMerchant.store_photo_url || null,
+          product_photo_url: primaryMerchant.product_photo_url || null,
+          business_description: primaryMerchant.business_description || null,
         };
 
         return NextResponse.json(response);
@@ -518,6 +524,9 @@ export async function POST(req: NextRequest) {
       invoice_number: parsedInvoice ?? (primaryMerchant.qr_type === 'DINAMIS' ? `INV-${primaryMerchant.id}` : null),
       exclusive_zone_detected: primaryMerchant.security_mode === 'EXCLUSIVE_STATIC' || primaryMerchant.security_mode === 'EXCLUSIVE_ZONE',
       exclusive_merchant_name: (primaryMerchant.security_mode === 'EXCLUSIVE_STATIC' || primaryMerchant.security_mode === 'EXCLUSIVE_ZONE') ? primaryMerchant.name : undefined,
+      store_photo_url: primaryMerchant.store_photo_url || null,
+      product_photo_url: primaryMerchant.product_photo_url || null,
+      business_description: primaryMerchant.business_description || null,
     };
 
     return NextResponse.json(response);

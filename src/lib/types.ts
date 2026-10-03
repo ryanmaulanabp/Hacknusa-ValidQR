@@ -84,6 +84,9 @@ export interface ScanResponse {
   invoice_number?: string | null;
   exclusive_zone_detected?: boolean;
   exclusive_merchant_name?: string;
+  store_photo_url?: string | null;
+  product_photo_url?: string | null;
+  business_description?: string | null;
 }
 
 export interface Transaction {
