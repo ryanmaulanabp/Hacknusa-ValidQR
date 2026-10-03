@@ -68,12 +68,13 @@ export async function seedOfficialDemoMerchants(existingClient?: any): Promise<v
             zone_category = $7,
             radius_meters = $8,
             qr_type = $9,
-            owner_nik = $10,
-            business_description = $11,
-            store_photo_url = $12,
-            product_photo_url = $13,
+            dynamic_amount = $10,
+            owner_nik = $11,
+            business_description = $12,
+            store_photo_url = $13,
+            product_photo_url = $14,
             is_active = true
-          WHERE nmid = $14`,
+          WHERE nmid = $15`,
           [
             m.name,
             m.city || 'BANDUNG',
@@ -84,6 +85,7 @@ export async function seedOfficialDemoMerchants(existingClient?: any): Promise<v
             m.zone_category || 'UMKM',
             m.radius_meters || 20,
             m.qr_type || 'STATIS',
+            m.dynamic_amount || null,
             m.owner_nik || null,
             m.business_description || null,
             m.store_photo_url || null,
@@ -96,8 +98,8 @@ export async function seedOfficialDemoMerchants(existingClient?: any): Promise<v
           `INSERT INTO merchants (
             nmid, name, city, latitude, longitude, wa_number,
             security_mode, zone_category, radius_meters, qr_type,
-            owner_nik, business_description, store_photo_url, product_photo_url, is_active
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true)`,
+            dynamic_amount, owner_nik, business_description, store_photo_url, product_photo_url, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true)`,
           [
             m.nmid,
             m.name,
@@ -109,6 +111,7 @@ export async function seedOfficialDemoMerchants(existingClient?: any): Promise<v
             m.zone_category || 'UMKM',
             m.radius_meters || 20,
             m.qr_type || 'STATIS',
+            m.dynamic_amount || null,
             m.owner_nik || null,
             m.business_description || null,
             m.store_photo_url || null,
@@ -123,6 +126,43 @@ export async function seedOfficialDemoMerchants(existingClient?: any): Promise<v
     if (shouldRelease) {
       client.release();
     }
+  }
+}
+
+/**
+ * Seed canonical incident logs if table is empty in PostgreSQL
+ */
+async function seedOfficialDemoIncidents(client: any): Promise<void> {
+  try {
+    const countRes = await client.query('SELECT COUNT(*) FROM incident_logs');
+    const count = parseInt(countRes.rows[0]?.count || '0', 10);
+    if (count === 0 && INITIAL_INCIDENT_LOGS.length > 0) {
+      for (const inc of INITIAL_INCIDENT_LOGS) {
+        await client.query(
+          `INSERT INTO incident_logs (
+            nmid_scanned, merchant_name, status, color, reason,
+            fuzzy_score, latitude, longitude, distance_meters, gps_available, raw_payload, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [
+            inc.nmid_scanned,
+            inc.merchant_name,
+            inc.status,
+            inc.color,
+            inc.reason || null,
+            inc.fuzzy_score != null ? Math.round(inc.fuzzy_score) : null,
+            inc.latitude || null,
+            inc.longitude || null,
+            inc.distance_meters || null,
+            inc.gps_available ?? false,
+            inc.raw_payload || null,
+            inc.created_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`[DB] Successfully seeded ${INITIAL_INCIDENT_LOGS.length} canonical incident logs.`);
+    }
+  } catch (err) {
+    console.error('[DB] seedOfficialDemoIncidents error:', err);
   }
 }
 
@@ -184,8 +224,9 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
         );
       `);
 
-      // Seed and guarantee canonical baseline demo merchants
+      // Seed and guarantee canonical baseline demo merchants & incident logs
       await seedOfficialDemoMerchants(client);
+      await seedOfficialDemoIncidents(client);
       return { mode: 'cloud', message: 'Connected to Supabase/Neon PostgreSQL successfully' };
     } finally {
       client.release();
