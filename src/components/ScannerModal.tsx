@@ -112,9 +112,9 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           }
           console.warn('GPS Request Error:', err);
           if (err.code === 1) {
-            clearGpsCoords('DENIED', 'Izin lokasi ditolak browser');
+            clearGpsCoords('DENIED', t('scan_gps_denied'));
           } else {
-            clearGpsCoords('OFF', 'Sinyal GPS mati atau tidak terdeteksi');
+            clearGpsCoords('OFF', t('scan_gps_off'));
           }
         },
         { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 5000 : 8000, maximumAge: 15000 }
@@ -154,9 +154,9 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           // If we already have a locked GPS position, don't clear it on momentary signal jitter
           if (!gpsLocationRef.current) {
             if (err.code === 1) {
-              clearGpsCoords('DENIED', 'Izin lokasi ditolak browser');
+              clearGpsCoords('DENIED', t('scan_gps_denied'));
             } else {
-              clearGpsCoords('OFF', 'Sinyal GPS mati');
+              clearGpsCoords('OFF', t('scan_gps_off'));
             }
           }
         },
@@ -697,10 +697,10 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                 <div className="absolute inset-0 bg-black/75 z-30 flex flex-col items-center justify-center gap-3">
                   <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
                   <div className="text-white font-bold text-sm tracking-wide">
-                    ValidQR AI Memeriksa 3-Layer...
+                    {t('scan_ai_examining')}
                   </div>
                   <div className="text-xs text-indigo-300">
-                    NMID • Fuzzy Match • Geofence GPS
+                    {t('scan_ai_sub')}
                   </div>
                 </div>
               )}
@@ -721,13 +721,13 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-amber-950/50 border border-amber-500/40 text-[11px] text-amber-200">
               <div className="flex items-center gap-1.5 line-clamp-1">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>GPS indoor (±{gpsAccuracy}m). Set titik di <strong>Peta</strong> untuk presisi 1m.</span>
+                <span>{t('scan_gps_indoor_warning')}</span>
               </div>
               <button
                 onClick={() => setShowMapPicker(true)}
                 className="px-2 py-0.5 rounded-lg bg-amber-500/30 hover:bg-amber-500/50 text-amber-300 font-bold text-[10px] shrink-0 ml-1.5"
               >
-                Peta
+                {t('scan_map_btn')}
               </button>
             </div>
           )}
@@ -763,7 +763,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
               title="Gunakan & segarkan GPS satelit perangkat asli"
             >
               <Radio className="w-3 h-3 text-emerald-400" />
-              <span>GPS Asli</span>
+              <span>{t('scan_real_gps_btn')}</span>
             </button>
 
             <button
@@ -776,7 +776,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
               title="Pilih titik lokasi GPS pada peta Leaflet"
             >
               <MapPin className="w-3 h-3 text-indigo-400" />
-              <span>Peta</span>
+              <span>{t('scan_map_btn')}</span>
               {showMapPicker ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
             </button>
           </div>
@@ -785,7 +785,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           {showMapPicker && (
             <div className="p-3 rounded-2xl bg-[#090B16] border border-indigo-500/30 space-y-2">
               <div className="flex items-center justify-between text-[11px] text-indigo-300 font-semibold">
-                <span>Pilih Lokasi GPS Pengguna (Leaflet)</span>
+                <span>{t('scan_map_drawer_title')}</span>
                 <span className="text-[10px] text-slate-400 font-mono">
                   {gpsLocation ? `${gpsLocation.lat.toFixed(5)}, ${gpsLocation.lon.toFixed(5)}` : ''}
                 </span>

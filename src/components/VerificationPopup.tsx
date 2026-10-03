@@ -44,7 +44,7 @@ export default function VerificationPopup({
   onClose,
   onProceed,
 }: VerificationPopupProps) {
-  const { t } = useApp();
+  const { t, isEnglish } = useApp();
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(true);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [isReportingMismatch, setIsReportingMismatch] = useState(false);
@@ -79,23 +79,27 @@ export default function VerificationPopup({
         iconBg: 'bg-rose-500/20 text-rose-500',
         badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
         kicker: isExclusiveViolation
-          ? '🚨 ZERO-TOLERANCE PERIMETER'
+          ? t('kicker_exclusive_violation')
           : isGpsRequired
-          ? '📍 GPS WAJIB AKTIF'
+          ? t('kicker_gps_required')
           : t('kicker_blocked'),
         title: isExclusiveViolation
-          ? 'TRANSAKSI DITOLAK: QR LIAR / TIDAK SAH'
+          ? t('title_exclusive_violation')
           : isGpsRequired
-          ? 'PEMBAYARAN DITOLAK: GPS WAJIB AKTIF'
+          ? t('title_gps_required')
           : !response.nmid_valid
           ? t('title_unregistered')
           : t('title_blocked'),
         subtitle: isExclusiveViolation
-          ? `Area ini menerapkan isolasi mutlak (Zero-Tolerance). Semua QR lain di sekitar area ${response.matched_name || 'Statis Eksklusif'} dilarang bertransaksi dan diblokir total!`
+          ? isEnglish
+            ? `This area enforces absolute isolation (Zero-Tolerance). All other QRs in the vicinity of ${response.matched_name || 'Exclusive Area'} are strictly prohibited and completely blocked!`
+            : `Area ini menerapkan isolasi mutlak (Zero-Tolerance). Semua QR lain di sekitar area ${response.matched_name || 'Statis Eksklusif'} dilarang bertransaksi dan diblokir total!`
           : isGpsRequired
           ? response.reason === 'GPS_REQUIRED_FOR_EXCLUSIVE_ZONE'
-            ? `Area ${response.matched_name || 'Statis Eksklusif'} menerapkan kebijakan Zero-Tolerance. GPS aktif dan akurat wajib disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi.`
-            : 'Sistem anti-fraud ValidQR mewajibkan GPS aktif pada perangkat Anda untuk memvalidasi keberadaan fisik merchant demi mencegah penipuan QRIS.'
+            ? isEnglish
+              ? `The area around ${response.matched_name || 'Exclusive Area'} enforces a strict Zero-Tolerance policy. Active and accurate GPS is mandatory to validate buyer physical presence.`
+              : `Area ${response.matched_name || 'Statis Eksklusif'} menerapkan kebijakan Zero-Tolerance. GPS aktif dan akurat wajib disertakan untuk memvalidasi keberadaan fisik pembeli di lokasi resmi.`
+            : t('sub_gps_required')
           : !response.nmid_valid
           ? t('sub_unregistered')
           : t('sub_blocked_overlay'),
@@ -135,10 +139,10 @@ export default function VerificationPopup({
         badgeBg: isExclusiveVerified
           ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
           : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-        kicker: isExclusiveVerified ? '🛡️ ZONA STATIS EKSKLUSIF TERPROTEKSI' : t('kicker_verified'),
-        title: isExclusiveVerified ? 'MERCHANT RESMI TERKUNCI' : t('title_verified'),
+        kicker: isExclusiveVerified ? t('kicker_exclusive_verified') : t('kicker_verified'),
+        title: isExclusiveVerified ? t('title_exclusive_verified') : t('title_verified'),
         subtitle: isExclusiveVerified
-          ? 'Single-QR Lockdown aktif. QR resmi terverifikasi dan dilindungi dari stiker liar.'
+          ? t('sub_exclusive_verified')
           : t('sub_verified'),
         icon: ShieldCheck,
       };
@@ -192,31 +196,35 @@ export default function VerificationPopup({
             </div>
             <div>
               <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                🚨 LAPORAN DUGAAN FRAUD DITERIMA
+                {t('report_fraud_received')}
               </span>
               <h2 className="text-base font-black text-white mt-1">
-                TRANSAKSI DIBATALKAN DEMI KEAMANAN
+                {t('report_tx_cancelled')}
               </h2>
             </div>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-[#291010] border border-rose-500/30 text-xs text-rose-200 space-y-2">
             <p className="leading-relaxed">
-              Anda melaporkan bahwa <strong>foto fisik toko atau produk di hadapan Anda berbeda</strong> dengan berkas terdaftar pada sistem ValidQR untuk merchant <strong>{response.matched_name || response.scanned_name}</strong>.
+              {isEnglish ? (
+                <>You reported that the <strong>storefront physical appearance or merchandise in front of you differs</strong> from the registered ValidQR file for merchant <strong className="text-white">{response.matched_name || response.scanned_name}</strong>.</>
+              ) : (
+                <>Anda melaporkan bahwa <strong>foto fisik toko atau produk di hadapan Anda berbeda</strong> dengan berkas terdaftar pada sistem ValidQR untuk merchant <strong className="text-white">{response.matched_name || response.scanned_name}</strong>.</>
+              )}
             </p>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              Laporan ini telah disimpan ke sistem audit keamanan anti-fraud. Pembayaran Anda dibatalkan secara aman tanpa pemotongan saldo.
+              {t('report_fraud_desc2')}
             </p>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2 text-xs">
             <div className="font-bold text-amber-300 flex items-center gap-1.5">
-              <span>💡 Tips Pencegahan Penipuan QRIS:</span>
+              <span>{t('report_tips_title')}</span>
             </div>
             <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-1">
-              <li>Jangan melakukan transfer manual jika diarahkan ke rekening pribadi orang lain.</li>
-              <li>Waspadai stiker QR yang ditempel menutupi kode QR akrilik resmi toko.</li>
-              <li>Tanyakan kepada staf/pemilik toko resmi mengenai keaslian kode QR tersebut.</li>
+              <li>{t('report_tip_1')}</li>
+              <li>{t('report_tip_2')}</li>
+              <li>{t('report_tip_3')}</li>
             </ul>
           </div>
 
@@ -224,7 +232,7 @@ export default function VerificationPopup({
             onClick={onClose}
             className="w-full py-3.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-lg transition-all cursor-pointer"
           >
-            Tutup &amp; Batalkan Pembayaran
+            {t('btn_close_cancel_pay')}
           </button>
         </div>
       </div>
@@ -273,9 +281,9 @@ export default function VerificationPopup({
             <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 flex items-start gap-2.5">
               <Send className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div className="text-[11px] leading-tight">
-                <span className="font-bold text-emerald-400">WhatsApp Alert Terkirim:</span>
+                <span className="font-bold text-emerald-400">{t('wa_alert_sent_title')}</span>
                 <p className="text-slate-300 mt-0.5">
-                  Notifikasi fraud otomatis dikirimkan ke nomor WhatsApp merchant terdaftar untuk segera memeriksa fisik stiker QRIS di lokasi.
+                  {t('wa_alert_sent_desc')}
                 </p>
               </div>
             </div>
@@ -286,9 +294,9 @@ export default function VerificationPopup({
             <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
               <div className="text-[11px] leading-tight">
-                <span className="font-bold text-amber-300">Sinyal GPS Diperlukan:</span>
+                <span className="font-bold text-amber-300">{t('gps_notice_title')}</span>
                 <p className="text-slate-300 mt-0.5">
-                  Sistem ValidQR mewajibkan GPS aktif pada ponsel untuk mencocokkan posisi fisik merchant. Silakan nyalakan GPS pada smartphone Anda lalu lakukan scan ulang.
+                  {t('gps_notice_desc')}
                 </p>
               </div>
             </div>
@@ -300,14 +308,18 @@ export default function VerificationPopup({
               <div className="font-extrabold text-white flex items-center gap-1.5 text-xs">
                 <MapPin className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>
-                  Jarak ke Toko: {response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km (${response.distance_meters} m)` : `${response.distance_meters} meter`}
+                  {t('dist_to_store_label')} {response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km (${response.distance_meters} m)` : `${response.distance_meters} ${isEnglish ? 'meters' : 'meter'}`}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Toko <strong className="text-white">{response.matched_name || response.scanned_name}</strong> terdaftar di lokasi berjarak <strong>{response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km` : `${response.distance_meters} meter`}</strong> dari posisi Anda saat ini (batas toleransi kasir: {response.geofence_radius}m).
+                {isEnglish ? (
+                  <>Store <strong className="text-white">{response.matched_name || response.scanned_name}</strong> is registered at a location <strong>{response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km` : `${response.distance_meters} meters`}</strong> away from your current position (cashier tolerance: {response.geofence_radius}m).</>
+                ) : (
+                  <>Toko <strong className="text-white">{response.matched_name || response.scanned_name}</strong> terdaftar di lokasi berjarak <strong>{response.distance_meters >= 1000 ? `${(response.distance_meters / 1000).toFixed(2)} km` : `${response.distance_meters} meter`}</strong> dari posisi Anda saat ini (batas toleransi kasir: {response.geofence_radius}m).</>
+                )}
               </p>
               <div className="text-[10px] text-rose-300/80 pt-1 border-t border-rose-500/20">
-                💡 <em>Catatan: Angka {response.distance_meters}m ini adalah <strong>jarak fisik sebenarnya</strong> antara posisi Anda dengan toko terdaftar, bukan kesalahan bacaan sensor GPS.</em>
+                {t('dist_real_note')}
               </div>
             </div>
           )}
@@ -318,7 +330,7 @@ export default function VerificationPopup({
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                  QRIS Dinamis • Nominal Otomatis Terkunci
+                  {t('dynamic_locked_badge')}
                 </span>
                 {response.invoice_number && (
                   <span className="text-[10px] font-mono text-purple-300/80">
@@ -327,26 +339,26 @@ export default function VerificationPopup({
                 )}
               </div>
               <div className="text-2xl font-black text-white">
-                Rp {Number(response.transaction_amount).toLocaleString('id-ID')}
+                Rp {Number(response.transaction_amount).toLocaleString(isEnglish ? 'en-US' : 'id-ID')}
               </div>
               <p className="text-[10px] text-purple-200/80 leading-tight">
-                Nominal tagihan terkunci otomatis oleh sistem kasir resmi (Tag 54). Pembeli tidak perlu memasukkan nominal manual.
+                {t('dynamic_locked_desc')}
               </p>
             </div>
           ) : (
             <div className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-xs">
               <span className="text-slate-300 flex items-center gap-1.5">
                 <QrCode className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Tipe QR: <strong>QRIS Statis (Stiker Fisik Tetap)</strong></span>
+                <span>{t('static_qris_type')}</span>
               </span>
-              <span className="text-[10px] text-slate-400 font-medium">Input Nominal Manual</span>
+              <span className="text-[10px] text-slate-400 font-medium">{t('manual_amount_hint')}</span>
             </div>
           )}
 
           {/* Scanned Merchant Card */}
           <div className={`p-4 rounded-2xl ${theme.cardBg} border border-white/10 space-y-2`}>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Merchant Terdeteksi</span>
+              <span className="text-slate-400">{t('detected_merchant_label')}</span>
               <span className="font-mono text-[11px] text-slate-400">NMID: {response.nmid}</span>
             </div>
 
@@ -367,10 +379,10 @@ export default function VerificationPopup({
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-white flex items-center gap-1.5">
                 <Store className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Verifikasi Visual Foto Toko</span>
+                <span>{t('visual_verify_title')}</span>
               </span>
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                <CheckCircle2 className="w-2.5 h-2.5" /> Database Resmi
+                <CheckCircle2 className="w-2.5 h-2.5" /> {t('official_db_badge')}
               </span>
             </div>
 
@@ -389,7 +401,7 @@ export default function VerificationPopup({
                   </div>
                 )}
                 <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-center text-slate-300 py-0.5 font-medium">
-                  Toko
+                  {t('photo_store_tag')}
                 </span>
               </div>
 
@@ -401,17 +413,17 @@ export default function VerificationPopup({
                     className="w-full h-full object-cover"
                   />
                   <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-center text-slate-300 py-0.5 font-medium">
-                    Produk
+                    {t('photo_product_tag')}
                   </span>
                 </div>
               ) : null}
 
               <div className="flex-1 min-w-0 pr-1">
                 <p className="text-[11px] text-slate-300 line-clamp-2 leading-tight">
-                  {response.business_description || 'Cocokkan fisik etalase toko dan produk di depan Anda dengan foto resmi.'}
+                  {response.business_description || (isEnglish ? 'Match physical storefront and products in front of you with official photos.' : 'Cocokkan fisik etalase toko dan produk di depan Anda dengan foto resmi.')}
                 </p>
                 <span className="text-[10px] text-indigo-300 font-semibold mt-1 inline-flex items-center gap-1">
-                  🔍 Cek sebelum bayar
+                  {t('check_before_pay')}
                 </span>
               </div>
             </div>
@@ -424,7 +436,7 @@ export default function VerificationPopup({
                 className="flex-1 py-2 px-3 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
               >
                 <Eye className="w-3.5 h-3.5" />
-                <span>Periksa &amp; Cocokkan Fisik</span>
+                <span>{t('btn_inspect_physical')}</span>
               </button>
 
               <button
@@ -432,10 +444,10 @@ export default function VerificationPopup({
                 onClick={handleReportMismatch}
                 disabled={isReportingMismatch}
                 className="py-2 px-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[11px] font-semibold flex items-center gap-1 transition-all shrink-0 cursor-pointer"
-                title="Laporkan jika toko berbeda"
+                title={isEnglish ? 'Report if store differs' : 'Laporkan jika toko berbeda'}
               >
                 <Flag className="w-3 h-3 text-rose-400" />
-                <span>Beda?</span>
+                <span>{t('btn_mismatch_flag')}</span>
               </button>
             </div>
           </div>
@@ -446,7 +458,7 @@ export default function VerificationPopup({
               onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
               className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-slate-300 hover:text-white transition-colors"
             >
-              <span>{t('header_detail')} (3-LAYER ENGINE)</span>
+              <span>{t('layer_detail_header')}</span>
               {showTechnicalDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
 
@@ -457,14 +469,14 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-indigo-400" />
-                      Layer 1: NMID Cross-Validation
+                      {t('layer1_title')}
                     </span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      ✓ Terdaftar Resmi
+                      {t('layer1_badge')}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    NMID dicocokkan ke database otoritas: <span className="font-mono text-white">{response.nmid}</span>
+                    {t('layer1_desc')} <span className="font-mono text-white">{response.nmid}</span>
                   </div>
                 </div>
 
@@ -473,26 +485,26 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-amber-400" />
-                      Layer 2: Hybrid Fuzzy Match
+                      {t('layer2_title')}
                     </span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${fuzzyColor(response.fuzzy_score)}`}>
-                      {response.fuzzy_score}% Skor
+                      {response.fuzzy_score}% {t('layer2_score')}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-[11px] bg-black/40 p-2 rounded-lg font-mono">
                     <div>
-                      <div className="text-slate-500 text-[9px] uppercase">Scan Stiker</div>
+                      <div className="text-slate-500 text-[9px] uppercase">{t('layer2_scan_label')}</div>
                       <div className="text-white truncate font-medium">{response.scanned_name}</div>
                     </div>
                     <div>
-                      <div className="text-slate-500 text-[9px] uppercase">Database Resmi</div>
+                      <div className="text-slate-500 text-[9px] uppercase">{t('layer2_db_label')}</div>
                       <div className="text-emerald-300 truncate font-medium">{response.matched_name}</div>
                     </div>
                   </div>
 
                   <div className="text-[10px] text-slate-400">
-                    Algoritma: Levenshtein (40%) + Token Overlap (60%)
+                    {t('layer2_algo')}
                   </div>
                 </div>
 
@@ -501,31 +513,33 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      Layer 3: GPS Geofencing (±{response.geofence_radius}m)
+                      {t('layer3_title')} (±{response.geofence_radius}m)
                     </span>
                     {response.reason === 'GPS_REQUIRED' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        ✗ GPS Wajib Aktif
+                        {t('layer3_gps_required')}
                       </span>
                     ) : response.location_check === 'MATCH' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        ✓ Dalam Radius
+                        {t('layer3_in_radius')}
                       </span>
                     ) : response.location_check === 'MISMATCH' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                        ✗ Melebihi Radius ({response.distance_meters}m)
+                        {t('layer3_exceed_radius')} ({response.distance_meters}m)
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        ? GPS Tidak Aktif
+                        {t('layer3_gps_off')}
                       </span>
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400">
                     {response.reason === 'GPS_REQUIRED' ? (
-                      <span className="text-rose-300 font-medium">Koordinat GPS tidak tersedia pada perangkat saat pemindaian.</span>
+                      <span className="text-rose-300 font-medium">
+                        {isEnglish ? 'GPS coordinates unavailable on device during scan.' : 'Koordinat GPS tidak tersedia pada perangkat saat pemindaian.'}
+                      </span>
                     ) : (
-                      <>Jarak terhitung: <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : 'Tidak tersedia'}</span> (Radius perimeter: {response.geofence_radius}m)</>
+                      <>{t('layer3_dist_calc')} <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : (isEnglish ? 'Unavailable' : 'Tidak tersedia')}</span> ({t('layer3_perimeter_rad')} {response.geofence_radius}m)</>
                     )}
                   </div>
                 </div>
@@ -535,32 +549,36 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
-                      Kebijakan Area &amp; Mode Keamanan
+                      {t('layer0_title')}
                     </span>
                     {response.security_mode === 'EXCLUSIVE_STATIC' || response.security_mode === 'EXCLUSIVE_ZONE' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        🛡️ Zona Eksklusif
+                        {t('layer0_exclusive')}
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        🏪 Zona Terbuka
+                        {t('layer0_open')}
                       </span>
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400 leading-snug">
                     {response.security_mode === 'EXCLUSIVE_STATIC' || response.security_mode === 'EXCLUSIVE_ZONE'
-                      ? `Single-QR Lockdown aktif (Radius ±${response.geofence_radius}m). Hanya 1 QR resmi berizin (${response.matched_name || ''}) yang boleh aktif di zona ini. QR asing langsung diblokir seketika.`
-                      : `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Pedagang resmi berdampingan aman bertransaksi tanpa saling memblokir.`}
+                      ? (isEnglish
+                          ? `Single-QR Lockdown active (Radius ±${response.geofence_radius}m). Only 1 authorized QR (${response.matched_name || ''}) allowed in this zone. Rogue QRs are immediately blocked.`
+                          : `Single-QR Lockdown aktif (Radius ±${response.geofence_radius}m). Hanya 1 QR resmi berizin (${response.matched_name || ''}) yang boleh aktif di zona ini. QR asing langsung diblokir seketika.`)
+                      : (isEnglish
+                          ? `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Official merchants safely transact side-by-side without mutual blockage.`
+                          : `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Pedagang resmi berdampingan aman bertransaksi tanpa saling memblokir.`)}
                   </div>
                 </div>
 
                 {/* Tipe QRIS Spesifikasi */}
                 <div className="p-2.5 rounded-xl bg-white/5 flex items-center justify-between text-[11px]">
                   <span className="text-slate-400 flex items-center gap-1.5">
-                    <QrCode className="w-3 h-3 text-indigo-400" /> Spesifikasi Transaksi:
+                    <QrCode className="w-3 h-3 text-indigo-400" /> {t('tx_spec_label')}
                   </span>
                   <span className="font-bold text-white">
-                    {response.qr_type === 'DINAMIS' ? 'QRIS Dinamis (EMVCo Tag 01="12")' : 'QRIS Statis (EMVCo Tag 01="11")'}
+                    {response.qr_type === 'DINAMIS' ? t('tx_spec_dynamic') : t('tx_spec_static')}
                   </span>
                 </div>
               </div>
@@ -609,7 +627,7 @@ export default function VerificationPopup({
                   <Store className="w-4 h-4 text-indigo-300" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Periksa Foto Fisik Toko &amp; Produk</h3>
+                  <h3 className="text-sm font-bold text-white">{t('photo_modal_title')}</h3>
                   <p className="text-[11px] text-slate-400 font-mono">
                     NMID: {response.nmid} • {response.matched_name || response.scanned_name}
                   </p>
@@ -630,7 +648,7 @@ export default function VerificationPopup({
               <div className="p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200 flex items-start gap-2">
                 <Eye className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" />
                 <p className="leading-snug">
-                  Cocokkan fisik etalase toko dan produk yang Anda lihat langsung di hadapan Anda dengan foto resmi dari database ValidQR di bawah ini sebelum menyelesaikan pembayaran.
+                  {t('photo_modal_hint')}
                 </p>
               </div>
 
@@ -639,9 +657,9 @@ export default function VerificationPopup({
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <Store className="w-3.5 h-3.5 text-emerald-400" />
-                    1. Foto Tempat Usaha / Etalase Fisik
+                    {t('photo_store_heading')}
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-semibold">Tampak Depan</span>
+                  <span className="text-[10px] text-emerald-400 font-semibold">{t('photo_store_view')}</span>
                 </div>
                 <div className="w-full h-52 rounded-2xl overflow-hidden bg-slate-900 border border-white/10 relative group">
                   {response.store_photo_url ? (
@@ -653,11 +671,13 @@ export default function VerificationPopup({
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1.5">
                       <ImageIcon className="w-8 h-8 text-slate-600" />
-                      <span className="text-xs text-slate-400">Foto tempat usaha belum dilampirkan oleh penjual</span>
+                      <span className="text-xs text-slate-400">
+                        {isEnglish ? 'Physical storefront photo not yet attached by merchant' : 'Foto tempat usaha belum dilampirkan oleh penjual'}
+                      </span>
                     </div>
                   )}
                   <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] text-emerald-300 font-medium">
-                    ✓ Data Resmi ValidQR
+                    {isEnglish ? '✓ ValidQR Official Data' : '✓ Data Resmi ValidQR'}
                   </span>
                 </div>
               </div>
@@ -667,9 +687,9 @@ export default function VerificationPopup({
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-white flex items-center gap-1.5">
                     <Package className="w-3.5 h-3.5 text-purple-400" />
-                    2. Foto Produk / Menu Jualan
+                    {t('photo_product_heading')}
                   </span>
-                  <span className="text-[10px] text-purple-400 font-semibold">Barang Dagangan</span>
+                  <span className="text-[10px] text-purple-400 font-semibold">{t('photo_product_view')}</span>
                 </div>
                 <div className="w-full h-52 rounded-2xl overflow-hidden bg-slate-900 border border-white/10 relative group">
                   {response.product_photo_url ? (
@@ -681,11 +701,13 @@ export default function VerificationPopup({
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1.5">
                       <Package className="w-8 h-8 text-slate-600" />
-                      <span className="text-xs text-slate-400">Foto katalog produk belum dilampirkan</span>
+                      <span className="text-xs text-slate-400">
+                        {isEnglish ? 'Product catalogue photo not yet attached' : 'Foto katalog produk belum dilampirkan'}
+                      </span>
                     </div>
                   )}
                   <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] text-purple-300 font-medium">
-                    ✓ Sampel Resmi
+                    {isEnglish ? '✓ Official Sample' : '✓ Sampel Resmi'}
                   </span>
                 </div>
               </div>
@@ -695,7 +717,7 @@ export default function VerificationPopup({
                 <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-1">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1">
                     <FileText className="w-3 h-3 text-indigo-400" />
-                    Rincian Barang Dagangan Resmi
+                    {t('photo_desc_heading')}
                   </span>
                   <p className="text-xs text-white leading-relaxed">
                     {response.business_description}
@@ -706,20 +728,20 @@ export default function VerificationPopup({
               {/* Checklist Keamanan */}
               <div className="p-3.5 rounded-2xl bg-[#141829] border border-white/5 space-y-2 text-xs">
                 <span className="font-bold text-slate-200 block text-[11px]">
-                  Panduan Keamanan Sebelum Bayar:
+                  {t('photo_safety_guide')}
                 </span>
                 <div className="space-y-1.5 text-[11px] text-slate-300">
                   <div className="flex items-start gap-1.5">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Pastikan ciri fisik gerobak/toko/etalase di depan Anda mirip foto di atas.</span>
+                    <span>{t('photo_safety_1')}</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    <span>Pastikan jenis barang/jasa yang Anda bayar sesuai dengan deskripsi resmi.</span>
+                    <span>{t('photo_safety_2')}</span>
                   </div>
                   <div className="flex items-start gap-1.5 text-rose-300">
                     <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                    <span>Bila stiker QR terlihat ditumpuk di atas kode lain atau kasir bukan orang resmi, jangan lanjutkan!</span>
+                    <span>{t('photo_safety_3')}</span>
                   </div>
                 </div>
               </div>
@@ -733,7 +755,7 @@ export default function VerificationPopup({
                 className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
               >
                 <Check className="w-4 h-4" />
-                <span>✓ Fisik Toko Sesuai (Lanjut)</span>
+                <span>{t('btn_store_matches')}</span>
               </button>
 
               <button
@@ -743,7 +765,7 @@ export default function VerificationPopup({
                 className="py-3 px-4 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 <Flag className="w-4 h-4 text-rose-400" />
-                <span>🚨 Laporkan Toko Berbeda</span>
+                <span>{t('btn_report_mismatch')}</span>
               </button>
             </div>
           </div>

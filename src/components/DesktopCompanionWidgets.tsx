@@ -93,16 +93,16 @@ export default function DesktopCompanionWidgets({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-400" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-              Skenario Pengujian (HackNusa)
+              {t('test_scenarios_title')}
             </h3>
           </div>
           <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
-            3-Layer Demo
+            {t('test_scenarios_badge')}
           </span>
         </div>
 
         <p className="text-[11px] text-slate-400 mb-3">
-          Klik tombol di bawah untuk langsung menguji verifikasi engine anti-fraud tanpa harus cetak stiker fisik:
+          {t('test_scenarios_desc')}
         </p>
 
         <div className="space-y-2">
@@ -117,10 +117,10 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors">
-                  Stiker A: Merchant Asli
+                  {t('scenario_a_title')}
                 </div>
                 <div className="text-[10px] text-emerald-400/80 font-mono">
-                  Pak Budi · VERIFIED (Hijau)
+                  {t('scenario_a_sub')}
                 </div>
               </div>
             </div>
@@ -138,10 +138,10 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-rose-300 transition-colors">
-                  Stiker B: Overlay Attack (Penipu)
+                  {t('scenario_b_title')}
                 </div>
                 <div className="text-[10px] text-rose-400/80 font-mono">
-                  Jarak ~122km · BLOCKED (Merah)
+                  {t('scenario_b_sub')}
                 </div>
               </div>
             </div>
@@ -159,10 +159,10 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">
-                  Stiker C: Rebrand Fraud
+                  {t('scenario_c_title')}
                 </div>
                 <div className="text-[10px] text-amber-400/80 font-mono">
-                  Nama Beda · WARNING (Kuning)
+                  {t('scenario_c_sub')}
                 </div>
               </div>
             </div>
@@ -180,13 +180,13 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
-                  <span>Stiker E: QR Resmi Masjid</span>
+                  <span>{t('scenario_e_title')}</span>
                   <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                    Mode Statis
+                    {t('scenario_e_badge')}
                   </span>
                 </div>
                 <div className="text-[10px] text-emerald-400/80 font-mono">
-                  Infaq Masjid · VERIFIED (Hijau)
+                  {t('scenario_e_sub')}
                 </div>
               </div>
             </div>
@@ -204,13 +204,13 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-rose-300 transition-colors flex items-center gap-1.5">
-                  <span>Stiker F: Penipuan Kotak Amal</span>
+                  <span>{t('scenario_f_title')}</span>
                   <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
-                    QR Liar
+                    {t('scenario_f_badge')}
                   </span>
                 </div>
                 <div className="text-[10px] text-rose-400 font-mono">
-                  Pelanggaran Zona Statis · BLOCKED (Merah)
+                  {t('scenario_f_sub')}
                 </div>
               </div>
             </div>
@@ -228,13 +228,13 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors flex items-center gap-1.5">
-                  <span>Stiker G: Pedagang Berdampingan</span>
+                  <span>{t('scenario_g_title')}</span>
                   <span className="px-1.5 py-0.2 rounded text-[9px] bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
-                    Mode Dinamis
+                    {t('scenario_g_badge')}
                   </span>
                 </div>
                 <div className="text-[10px] text-indigo-400/80 font-mono">
-                  Food Court (3m dr Pak Budi) · VERIFIED
+                  {t('scenario_g_sub')}
                 </div>
               </div>
             </div>
@@ -252,13 +252,13 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
-                  <span>Stiker H: QR Masjid Tanpa GPS</span>
+                  <span>{t('scenario_h_title')}</span>
                   <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
-                    Wajib GPS
+                    {t('scenario_h_badge')}
                   </span>
                 </div>
                 <div className="text-[10px] text-amber-400 font-mono">
-                  GPS Mati/Off · BLOCKED (Zero-Tolerance)
+                  {t('scenario_h_sub')}
                 </div>
               </div>
             </div>
@@ -276,13 +276,13 @@ export default function DesktopCompanionWidgets({
               </div>
               <div>
                 <div className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors flex items-center gap-1.5">
-                  <span>Stiker I: QRIS Dinamis Kasir POS</span>
+                  <span>{t('scenario_i_title')}</span>
                   <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                    Nominal Rp 35.000
+                    {t('scenario_i_badge')}
                   </span>
                 </div>
                 <div className="text-[10px] text-purple-400/80 font-mono">
-                  Tag 54 Terkunci Otomatis · VERIFIED
+                  {t('scenario_i_sub')}
                 </div>
               </div>
             </div>
@@ -298,7 +298,7 @@ export default function DesktopCompanionWidgets({
           className="p-3.5 rounded-2xl bg-[#101424] hover:bg-[#181B2F] border border-white/10 hover:border-indigo-500/40 transition-all flex items-center gap-2 font-bold text-white group"
         >
           <Store className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span>Merchant Portal</span>
+          <span>{t('mp_title')}</span>
           <ExternalLink className="w-3 h-3 text-slate-400 ml-auto" />
         </Link>
 
@@ -307,7 +307,7 @@ export default function DesktopCompanionWidgets({
           className="p-3.5 rounded-2xl bg-gradient-to-r from-indigo-600/30 to-purple-600/30 hover:from-indigo-600/50 hover:to-purple-600/50 border border-indigo-500/40 transition-all flex items-center gap-2 font-bold text-white"
         >
           <ShieldCheck className="w-4 h-4 text-indigo-400" />
-          <span>Buka Scanner Kamera</span>
+          <span>{t('btn_open_camera_scanner')}</span>
         </button>
       </div>
     </div>

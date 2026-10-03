@@ -56,7 +56,7 @@ function MainAppContent() {
   const [successTxId, setSuccessTxId] = useState<string>('');
 
   const formatRupiah = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(isEnglish ? 'en-US' : 'id-ID', {
       style: 'currency',
       currency: 'IDR',
       maximumFractionDigits: 0,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/LanguageContext';
 import { ScanResponse, QrPayload } from '@/lib/types';
 import {
@@ -11,6 +11,7 @@ import {
   Lock,
   ArrowRight,
   CheckCircle,
+  Sparkles,
 } from 'lucide-react';
 
 interface PaymentAmountModalProps {
@@ -28,15 +29,24 @@ export default function PaymentAmountModal({
   payload,
   onPaymentSuccess,
 }: PaymentAmountModalProps) {
-  const { t, balance, deductBalance, isDarkMode } = useApp();
+  const { t, balance, deductBalance, isDarkMode, isEnglish } = useApp();
   const [amount, setAmount] = useState<number>(35000);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pin, setPin] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (response?.qr_type === 'DINAMIS' && response?.transaction_amount) {
+      setAmount(Number(response.transaction_amount));
+    } else {
+      setAmount(35000);
+    }
+  }, [response]);
+
   if (!isOpen || !response) return null;
 
+  const isDynamicLocked = response.qr_type === 'DINAMIS' && !!response.transaction_amount;
   const quickAmounts = [10000, 25000, 50000, 100000];
   const remainingBalance = balance - amount;
   const isInsufficient = remainingBalance < 0;
@@ -45,7 +55,7 @@ export default function PaymentAmountModal({
     response.scanned_name || payload?.merchantName || 'Merchant ValidQR';
 
   const formatRupiah = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(isEnglish ? 'en-US' : 'id-ID', {
       style: 'currency',
       currency: 'IDR',
       maximumFractionDigits: 0,
@@ -147,7 +157,7 @@ export default function PaymentAmountModal({
 
             <div className="text-right">
               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                Resmi
+                {isEnglish ? 'Official' : 'Resmi'}
               </span>
             </div>
           </div>
@@ -162,36 +172,48 @@ export default function PaymentAmountModal({
               <span className="text-indigo-400 text-lg">Rp</span>
               <input
                 type="text"
-                value={amount > 0 ? amount.toLocaleString('id-ID') : ''}
+                value={amount > 0 ? amount.toLocaleString(isEnglish ? 'en-US' : 'id-ID') : ''}
                 onChange={handleAmountInputChange}
+                disabled={isDynamicLocked}
                 placeholder="0"
-                className="w-48 bg-transparent text-center text-white font-extrabold text-2xl focus:outline-none"
+                className={`w-48 bg-transparent text-center text-white font-extrabold text-2xl focus:outline-none ${
+                  isDynamicLocked ? 'cursor-not-allowed opacity-90' : ''
+                }`}
               />
             </div>
 
             {/* Quick Amount Chips */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
-              {quickAmounts.map(val => (
-                <button
-                  key={val}
-                  onClick={() => handleQuickSelect(val)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                    amount === val
-                      ? 'bg-[#6C5CE7] text-white border-indigo-500 shadow-md shadow-indigo-600/30'
-                      : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
-                  }`}
-                >
-                  {formatRupiah(val)}
-                </button>
-              ))}
+            {isDynamicLocked ? (
+              <div className="flex items-center justify-center gap-1.5 mt-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  {t('dynamic_locked_amount_chip')}
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-4">
+                {quickAmounts.map(val => (
+                  <button
+                    key={val}
+                    onClick={() => handleQuickSelect(val)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                      amount === val
+                        ? 'bg-[#6C5CE7] text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+                        : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    }`}
+                  >
+                    {formatRupiah(val)}
+                  </button>
+                ))}
 
-              <button
-                onClick={handleExactBalance}
-                className="px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/40"
-              >
-                {t('chip_exact_balance')}
-              </button>
-            </div>
+                <button
+                  onClick={handleExactBalance}
+                  className="px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/40"
+                >
+                  {t('chip_exact_balance')}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Balance Calculation Table */}
@@ -249,7 +271,7 @@ export default function PaymentAmountModal({
         {showPinModal && (
           <div className="absolute inset-0 bg-[#0B0D1B] z-50 flex flex-col justify-between p-6 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400 font-mono">PIN SECURITY</span>
+              <span className="text-xs text-slate-400 font-mono">{t('pin_security_header')}</span>
               <button
                 onClick={() => setShowPinModal(false)}
                 className="p-1.5 rounded-full bg-white/10 text-white"
@@ -286,7 +308,7 @@ export default function PaymentAmountModal({
               {isSubmitting && (
                 <div className="flex items-center justify-center gap-2 text-xs text-indigo-400 mt-2">
                   <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                  <span>Memverifikasi transaksi...</span>
+                  <span>{t('verifying_transaction')}</span>
                 </div>
               )}
             </div>

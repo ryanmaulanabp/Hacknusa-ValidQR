@@ -28,7 +28,7 @@ export default function PaymentSuccessModal({
   txId,
   response,
 }: PaymentSuccessModalProps) {
-  const { t, balance } = useApp();
+  const { t, balance, isEnglish } = useApp();
 
   useEffect(() => {
     if (isOpen) {
@@ -45,7 +45,7 @@ export default function PaymentSuccessModal({
   if (!isOpen || !response) return null;
 
   const formatRupiah = (val: number) => {
-    return new Intl.NumberFormat('id-ID', {
+    return new Intl.NumberFormat(isEnglish ? 'en-US' : 'id-ID', {
       style: 'currency',
       currency: 'IDR',
       maximumFractionDigits: 0,
@@ -107,7 +107,7 @@ export default function PaymentSuccessModal({
 
               <div className="flex items-center justify-between">
                 <span className="text-slate-400">{t('receipt_time')}</span>
-                <span className="text-slate-200">{new Date().toLocaleString('id-ID')}</span>
+                <span className="text-slate-200">{new Date().toLocaleString(isEnglish ? 'en-US' : 'id-ID')}</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -151,19 +151,19 @@ export default function PaymentSuccessModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => alert('Struk pembayaran berhasil disimpan ke perangkat!')}
+              onClick={() => alert(isEnglish ? 'Payment receipt saved to device!' : 'Struk pembayaran berhasil disimpan ke perangkat!')}
               className="flex-1 py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Unduh Struk</span>
+              <span>{isEnglish ? 'Download Receipt' : 'Unduh Struk'}</span>
             </button>
 
             <button
-              onClick={() => alert('Link struk pembayaran berhasil disalin!')}
+              onClick={() => alert(isEnglish ? 'Receipt link copied to clipboard!' : 'Link struk pembayaran berhasil disalin!')}
               className="flex-1 py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span>Bagikan</span>
+              <span>{isEnglish ? 'Share' : 'Bagikan'}</span>
             </button>
           </div>
         </div>
