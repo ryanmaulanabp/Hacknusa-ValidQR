@@ -85,8 +85,9 @@ function MainAppContent() {
   // Run a quick preset directly from the desktop companion widget
   const handleRunPreset = async (preset: any) => {
     try {
-      const userLat = preset.userLat ?? SELARU_LAT;
-      const userLon = preset.userLon ?? SELARU_LON;
+      // If userLat/userLon is explicitly null (e.g. Preset H without GPS), preserve null!
+      const userLat = preset.userLat !== undefined ? preset.userLat : SELARU_LAT;
+      const userLon = preset.userLon !== undefined ? preset.userLon : SELARU_LON;
       const payloadToSend = {
         nmid: preset.nmid,
         name: preset.merchantName,

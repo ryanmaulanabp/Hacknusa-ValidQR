@@ -66,7 +66,7 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     wa_number: '081224990680',
     security_mode: 'EXCLUSIVE_STATIC',
     zone_category: 'TEMPAT_IBADAH',
-    radius_meters: 60,
+    radius_meters: 25,
     qr_type: 'STATIS',
     owner_nik: '3273010101850002',
     business_description: 'Kotak amal infaq & shodaqoh resmi DKM Masjid Syamsul Ulum Telkom University',

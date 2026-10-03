@@ -42,6 +42,91 @@ if (connectionString) {
 }
 
 /**
+ * Ensure canonical baseline demo merchants always exist and are correctly configured in PostgreSQL.
+ */
+export async function seedOfficialDemoMerchants(existingClient?: any): Promise<void> {
+  const client = existingClient || (pool ? await pool.connect() : null);
+  if (!client) return;
+
+  const shouldRelease = !existingClient;
+  try {
+    // 1. Delete rogue counterfeit merchant so it can never pose as valid in the database
+    await client.query("DELETE FROM merchants WHERE nmid = 'ID88887777666'");
+
+    // 2. Upsert canonical demo merchants
+    for (const m of INITIAL_MERCHANTS) {
+      const check = await client.query('SELECT id FROM merchants WHERE nmid = $1', [m.nmid]);
+      if (check.rows.length > 0) {
+        await client.query(
+          `UPDATE merchants SET
+            name = $1,
+            city = $2,
+            latitude = $3,
+            longitude = $4,
+            wa_number = $5,
+            security_mode = $6,
+            zone_category = $7,
+            radius_meters = $8,
+            qr_type = $9,
+            owner_nik = $10,
+            business_description = $11,
+            store_photo_url = $12,
+            product_photo_url = $13,
+            is_active = true
+          WHERE nmid = $14`,
+          [
+            m.name,
+            m.city || 'BANDUNG',
+            m.latitude,
+            m.longitude,
+            m.wa_number,
+            m.security_mode || 'OPEN_ZONE',
+            m.zone_category || 'UMKM',
+            m.radius_meters || 20,
+            m.qr_type || 'STATIS',
+            m.owner_nik || null,
+            m.business_description || null,
+            m.store_photo_url || null,
+            m.product_photo_url || null,
+            m.nmid,
+          ]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO merchants (
+            nmid, name, city, latitude, longitude, wa_number,
+            security_mode, zone_category, radius_meters, qr_type,
+            owner_nik, business_description, store_photo_url, product_photo_url, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true)`,
+          [
+            m.nmid,
+            m.name,
+            m.city || 'BANDUNG',
+            m.latitude,
+            m.longitude,
+            m.wa_number,
+            m.security_mode || 'OPEN_ZONE',
+            m.zone_category || 'UMKM',
+            m.radius_meters || 20,
+            m.qr_type || 'STATIS',
+            m.owner_nik || null,
+            m.business_description || null,
+            m.store_photo_url || null,
+            m.product_photo_url || null,
+          ]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('[DB] seedOfficialDemoMerchants error:', err);
+  } finally {
+    if (shouldRelease) {
+      client.release();
+    }
+  }
+}
+
+/**
  * Auto-initialize tables in PostgreSQL if connected
  */
 export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; message: string }> {
@@ -99,28 +184,8 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
         );
       `);
 
-      // Seed if empty
-      const countRes = await client.query('SELECT COUNT(*) FROM merchants');
-      if (parseInt(countRes.rows[0].count, 10) === 0) {
-        for (const m of INITIAL_MERCHANTS) {
-          await client.query(
-            `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, security_mode, zone_category, radius_meters, is_active)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [
-              m.nmid,
-              m.name,
-              m.city || 'BANDUNG',
-              m.latitude,
-              m.longitude,
-              m.wa_number,
-              m.security_mode || 'DYNAMIC',
-              m.zone_category || 'UMKM',
-              m.radius_meters || 20,
-              m.is_active,
-            ]
-          );
-        }
-      }
+      // Seed and guarantee canonical baseline demo merchants
+      await seedOfficialDemoMerchants(client);
       return { mode: 'cloud', message: 'Connected to Supabase/Neon PostgreSQL successfully' };
     } finally {
       client.release();

@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
-import { initDatabase } from '@/lib/db';
+import { initDatabase, seedOfficialDemoMerchants } from '@/lib/db';
 
 export async function GET() {
   try {
     const result = await initDatabase();
+    await seedOfficialDemoMerchants();
     return NextResponse.json({
       success: true,
       result,
+      message: 'Database schema and official demo merchants successfully verified & synchronized.',
     });
   } catch (err: any) {
     return NextResponse.json(
