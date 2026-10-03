@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Merchant, SecurityMode, ZoneCategory } from '@/lib/types';
+import { Merchant, SecurityMode, ZoneCategory, QrType } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
 import { haversineDistanceMeters } from '@/lib/geofence';
 import StickerModal from '@/components/StickerModal';
+import ProofModal from '@/components/ProofModal';
 import {
   Store,
   ArrowLeft,
@@ -24,6 +25,12 @@ import {
   Send,
   Building2,
   ShieldAlert,
+  FileText,
+  Upload,
+  Image as ImageIcon,
+  Check,
+  Package,
+  UserCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -53,11 +60,20 @@ export default function MerchantPortalPage() {
   const [latitude, setLatitude] = useState(SELARU_LAT);
   const [longitude, setLongitude] = useState(SELARU_LON);
   const [waNumber, setWaNumber] = useState('');
-  const [securityMode, setSecurityMode] = useState<SecurityMode>('DYNAMIC');
+  const [securityMode, setSecurityMode] = useState<SecurityMode>('OPEN_ZONE');
   const [zoneCategory, setZoneCategory] = useState<ZoneCategory>('UMKM');
   const [radiusMeters, setRadiusMeters] = useState<number>(20);
+  const [qrType, setQrType] = useState<QrType>('STATIS');
+  const [dynamicAmount, setDynamicAmount] = useState<string>('25000');
+  const [ownerNik, setOwnerNik] = useState('');
+  const [businessDescription, setBusinessDescription] = useState('');
+  const [storePhotoUrl, setStorePhotoUrl] = useState('');
+  const [productPhotoUrl, setProductPhotoUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdatingWa, setIsUpdatingWa] = useState(false);
+
+  // Proof Modal State
+  const [selectedProofMerchant, setSelectedProofMerchant] = useState<Merchant | null>(null);
 
   // WhatsApp Gateway State
   const [waTesting, setWaTesting] = useState(false);
@@ -76,6 +92,10 @@ export default function MerchantPortalPage() {
     rawPayload?: string;
     hasConflict?: boolean;
     wa_number?: string | null;
+    qr_type?: 'STATIS' | 'DINAMIS';
+    dynamic_amount?: number | null;
+    security_mode?: string;
+    radius_meters?: number;
   } | null>(null);
 
   const fetchMerchants = async () => {
@@ -163,6 +183,23 @@ export default function MerchantPortalPage() {
     }
   };
 
+  const SAMPLE_STORE_PHOTO = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80';
+  const SAMPLE_PRODUCT_PHOTO = 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?auto=format&fit=crop&w=600&q=80';
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      alert('Ukuran foto maksimal 3MB!');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setter(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSelectMerchantToView = (m: Merchant) => {
     setViewingMerchant(m);
     setName(m.name);
@@ -171,9 +208,15 @@ export default function MerchantPortalPage() {
     setLatitude(Number(m.latitude));
     setLongitude(Number(m.longitude));
     setWaNumber(m.wa_number || '');
-    setSecurityMode(m.security_mode || 'DYNAMIC');
+    setSecurityMode(m.security_mode || 'OPEN_ZONE');
     setZoneCategory(m.zone_category || 'UMKM');
-    setRadiusMeters(m.radius_meters || (m.security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20));
+    setRadiusMeters(m.radius_meters || ((m.security_mode === 'EXCLUSIVE_STATIC' || m.security_mode === 'EXCLUSIVE_ZONE') ? 60 : 20));
+    setQrType(m.qr_type || 'STATIS');
+    setDynamicAmount(m.dynamic_amount ? m.dynamic_amount.toString() : '25000');
+    setOwnerNik(m.owner_nik || '');
+    setBusinessDescription(m.business_description || '');
+    setStorePhotoUrl(m.store_photo_url || '');
+    setProductPhotoUrl(m.product_photo_url || '');
     // Scroll smoothly to map container
     mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -186,18 +229,24 @@ export default function MerchantPortalPage() {
     setLatitude(SELARU_LAT);
     setLongitude(SELARU_LON);
     setWaNumber('');
-    setSecurityMode('DYNAMIC');
+    setSecurityMode('OPEN_ZONE');
     setZoneCategory('UMKM');
     setRadiusMeters(20);
+    setQrType('STATIS');
+    setDynamicAmount('25000');
+    setOwnerNik('');
+    setBusinessDescription('');
+    setStorePhotoUrl('');
+    setProductPhotoUrl('');
   };
 
-  // Zero-Tolerance Check: Check if current pin is within an active EXCLUSIVE_STATIC zone
+  // Zero-Tolerance Check: Check if current pin is within an active EXCLUSIVE_STATIC / EXCLUSIVE_ZONE zone
   const exclusiveConflict = useMemo(() => {
     if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) return null;
     if (viewingMerchant) return null; // When viewing an existing merchant, don't flag self
 
     for (const m of merchants) {
-      if (m.is_active && m.security_mode === 'EXCLUSIVE_STATIC') {
+      if (m.is_active && (m.security_mode === 'EXCLUSIVE_STATIC' || m.security_mode === 'EXCLUSIVE_ZONE')) {
         const dist = haversineDistanceMeters(latitude, longitude, m.latitude, m.longitude);
         const rad = m.radius_meters || 50;
         // Strict 0-Meter Cutoff: if inside radius, conflict!
@@ -211,7 +260,30 @@ export default function MerchantPortalPage() {
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) return alert('Nama merchant wajib diisi');
+    if (!name.trim()) return alert('Nama merchant wajib diisi!');
+
+    if (!ownerNik.trim() || !/^\d{16}$/.test(ownerNik.trim())) {
+      return alert('Validasi Gagal: NIK KTP penanggung jawab wajib 16 digit angka!');
+    }
+
+    if (!businessDescription.trim() || businessDescription.trim().length < 5) {
+      return alert('Validasi Gagal: Rincian barang dagangan / hal yang dijual wajib diisi minimal 5 karakter!');
+    }
+
+    if (!storePhotoUrl) {
+      return alert('Validasi Gagal: Foto tempat usaha / etalase fisik toko wajib diunggah!');
+    }
+
+    if (!productPhotoUrl) {
+      return alert('Validasi Gagal: Foto barang dagangan / produk yang dijual wajib diunggah!');
+    }
+
+    if (qrType === 'DINAMIS') {
+      const amt = parseFloat(dynamicAmount);
+      if (isNaN(amt) || amt <= 0) {
+        return alert('Validasi Gagal: QRIS Dinamis mewajibkan nominal transaksi yang valid (lebih dari Rp 0)!');
+      }
+    }
 
     if (exclusiveConflict) {
       return alert(
@@ -225,15 +297,21 @@ export default function MerchantPortalPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
-          city,
+          name: name.trim(),
+          city: city.trim() || 'BANDUNG',
           nmid: nmid.trim() || undefined,
           latitude: Number(latitude),
           longitude: Number(longitude),
           wa_number: waNumber.trim() || null,
-          security_mode: securityMode,
+          security_mode: securityMode === 'EXCLUSIVE_STATIC' || securityMode === 'EXCLUSIVE_ZONE' ? 'EXCLUSIVE_ZONE' : 'OPEN_ZONE',
           zone_category: zoneCategory,
           radius_meters: Number(radiusMeters),
+          qr_type: qrType,
+          dynamic_amount: qrType === 'DINAMIS' ? parseFloat(dynamicAmount) : null,
+          owner_nik: ownerNik.trim(),
+          business_description: businessDescription.trim(),
+          store_photo_url: storePhotoUrl,
+          product_photo_url: productPhotoUrl,
         }),
       });
 
@@ -250,6 +328,11 @@ export default function MerchantPortalPage() {
           qrDataUrl: data.qrDataUrl,
           rawPayload: data.rawPayload,
           hasConflict: data.hasConflict,
+          qr_type: data.qr_type,
+          dynamic_amount: data.dynamic_amount,
+          security_mode: securityMode,
+          radius_meters: Number(radiusMeters),
+          wa_number: waNumber.trim() || null,
         });
         fetchMerchants();
       } else {
@@ -419,7 +502,7 @@ export default function MerchantPortalPage() {
             {/* Merchant Identity Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-300 mb-1.5 font-semibold">Nama Merchant *</label>
+                <label className="block text-slate-300 mb-1.5 font-semibold">Nama Merchant / Toko *</label>
                 <input
                   type="text"
                   required
@@ -452,10 +535,32 @@ export default function MerchantPortalPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Legal Identity: NIK & WhatsApp */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-slate-300 mb-1.5 font-semibold flex items-center justify-between">
+                  <span>NIK KTP Pemilik Usaha *</span>
+                  <span className="text-[10px] text-indigo-400 font-mono">16 Digit Angka</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={16}
+                  disabled={!!viewingMerchant}
+                  value={ownerNik}
+                  onChange={e => setOwnerNik(e.target.value.replace(/\D/g, ''))}
+                  placeholder="3204012345670001"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                    viewingMerchant
+                      ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                      : 'border-white/10 text-white focus:border-indigo-500'
+                  } font-mono text-xs focus:outline-none`}
+                />
+              </div>
+
               <div>
                 <label className="block text-slate-300 mb-1.5 font-semibold">
-                  NMID (Kosongkan untuk generate otomatis / isi untuk uji Rebrand)
+                  NMID (Opsional / Kosongkan untuk generate)
                 </label>
                 <input
                   type="text"
@@ -473,15 +578,15 @@ export default function MerchantPortalPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert (Anti-Fraud Toko Ini)</label>
-                  <span className="text-[10px] text-emerald-400 font-mono">Fonnte Gateway</span>
+                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert</label>
+                  <span className="text-[10px] text-emerald-400 font-mono">Fonnte</span>
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={waNumber}
                     onChange={e => setWaNumber(e.target.value)}
-                    placeholder="Contoh: 081234567890 (Nomor WhatsApp Merchant)"
+                    placeholder="081234567890"
                     className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:border-indigo-500 text-xs focus:outline-none"
                   />
                   {viewingMerchant && (
@@ -489,62 +594,154 @@ export default function MerchantPortalPage() {
                       type="button"
                       onClick={handleUpdateWaNumber}
                       disabled={isUpdatingWa || !waNumber.trim()}
-                      className="px-3 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0 shadow-sm"
-                      title="Simpan perubahan nomor WhatsApp merchant ini"
+                      className="px-2.5 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0"
                     >
                       {isUpdatingWa ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                      <span>{isUpdatingWa ? 'Menyimpan...' : 'Update WA'}</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => handleTestWhatsApp(waNumber)}
                     disabled={waTesting || !waNumber.trim()}
-                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 shrink-0 shadow-sm"
-                    title="Kirim pesan uji coba ke nomor ini via Fonnte Gateway"
+                    className="px-2.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0"
                   >
-                    {waTesting ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                    <span>{waTesting ? 'Mengirim...' : 'Test Notif WA'}</span>
+                    {waTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  💡 Setiap merchant memiliki nomor WhatsApp sendiri. Peringatan fraud akan otomatis terkirim langsung ke nomor WhatsApp toko ini.
-                </p>
-                {waTestResult && (
-                  <p className={`text-[11px] mt-1.5 font-medium ${waTestResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {waTestResult.message}
-                  </p>
-                )}
               </div>
             </div>
 
-            {/* ── Mode Keamanan & Tipe Kawasan ── */}
+            {/* Business Description / Things Sold */}
+            <div>
+              <label className="block text-slate-300 mb-1.5 font-semibold flex items-center justify-between">
+                <span>Rincian Barang Dagangan / Hal yang Dijual *</span>
+                <span className="text-[10px] text-slate-400">Verifikasi Halal &amp; Komoditas Usaha</span>
+              </label>
+              <input
+                type="text"
+                required
+                disabled={!!viewingMerchant}
+                value={businessDescription}
+                onChange={e => setBusinessDescription(e.target.value)}
+                placeholder="Contoh: Menjual bakso urat, mie ayam, es teh manis, dan aneka minuman segar"
+                className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                  viewingMerchant
+                    ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                    : 'border-white/10 text-white focus:border-indigo-500'
+                } text-xs focus:outline-none`}
+              />
+            </div>
+
+            {/* ── 1. PILIHAN TIPE QRIS: STATIS VS DINAMIS (STANDAR BI) ── */}
+            <div className="p-4 rounded-2xl bg-[#141829] border border-indigo-500/20 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-indigo-400" />
+                  <span className="font-bold text-white text-xs">Pilihan Tipe QRIS (Standar Bank Indonesia)</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-medium">
+                  ASPI EMVCo Spec
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* QRIS Statis */}
+                <div
+                  onClick={() => {
+                    if (viewingMerchant) return;
+                    setQrType('STATIS');
+                  }}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    qrType === 'STATIS'
+                      ? 'bg-indigo-950/50 border-indigo-500/60 shadow-lg shadow-indigo-500/10'
+                      : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
+                  } ${viewingMerchant ? 'cursor-default' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xs text-white">
+                      <QrCode className="w-4 h-4 text-emerald-400" />
+                      <span>QRIS Statis (Stiker Tetap)</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                      Stiker Fisik
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                    Jenis kode QR yang tetap dan tidak berubah, digunakan untuk memfasilitasi pembayaran berulang kali di suatu lokasi. Pelanggan memindai lalu memasukkan nominal pembayaran di dompet digital.
+                  </p>
+                  <div className="mt-2.5 text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Cocok untuk meja kasir, etalase, gerobak, &amp; kotak amal
+                  </div>
+                </div>
+
+                {/* QRIS Dinamis */}
+                <div
+                  onClick={() => {
+                    if (viewingMerchant) return;
+                    setQrType('DINAMIS');
+                  }}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    qrType === 'DINAMIS'
+                      ? 'bg-purple-950/50 border-purple-500/60 shadow-lg shadow-purple-500/10'
+                      : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
+                  } ${viewingMerchant ? 'cursor-default' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xs text-white">
+                      <Sparkles className="w-4 h-4 text-purple-400" />
+                      <span>QRIS Dinamis (Kasir / Per Transaksi)</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
+                      Nominal Terkunci
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                    Jenis kode QR yang berubah untuk setiap transaksi. Kode QR memuat jumlah yang harus dibayar secara otomatis (Tag 54) dan nomor tagihan unik, sehingga mengurangi risiko penipuan nominal.
+                  </p>
+
+                  {/* Input Nominal Transaksi jika QRIS Dinamis */}
+                  {qrType === 'DINAMIS' && (
+                    <div className="mt-3 pt-2.5 border-t border-purple-500/30 flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-purple-300 shrink-0">Nominal Tagihan: Rp</span>
+                      <input
+                        type="number"
+                        min="1000"
+                        step="500"
+                        disabled={!!viewingMerchant}
+                        value={dynamicAmount}
+                        onChange={e => setDynamicAmount(e.target.value)}
+                        placeholder="25000"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0E1122] border border-purple-500/40 text-purple-200 font-mono text-xs focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── 2. MODE KEAMANAN LOKASI: ZONA TERBUKA VS ZONA EKSKLUSIF (NAMA BARU) ── */}
             <div className="p-4 rounded-2xl bg-[#141829] border border-white/10 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                  <span className="font-bold text-white text-xs">Mode Keamanan QR &amp; Kebijakan Area</span>
+                  <span className="font-bold text-white text-xs">Kebijakan Area &amp; Mode Keamanan Lokasi (Geofencing)</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">ValidQR Adaptive Zone Engine</span>
+                <span className="text-[10px] text-slate-400 font-mono">ValidQR Location Guard</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Option 1: Mode Dinamis */}
+                {/* Zona Terbuka */}
                 <div
                   onClick={() => {
                     if (viewingMerchant) return;
-                    setSecurityMode('DYNAMIC');
+                    setSecurityMode('OPEN_ZONE');
                     setRadiusMeters(20);
                     if (zoneCategory === 'TEMPAT_IBADAH' || zoneCategory === 'RUMAH_SAKIT') {
                       setZoneCategory('UMKM');
                     }
                   }}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                    securityMode === 'DYNAMIC'
+                    securityMode === 'OPEN_ZONE' || securityMode === 'DYNAMIC'
                       ? 'bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-500/10'
                       : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
                   } ${viewingMerchant ? 'cursor-default' : ''}`}
@@ -552,38 +749,31 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <Store className="w-4 h-4 text-emerald-400" />
-                      <span>Mode Dinamis (Pedagang / UMKM)</span>
+                      <span>Zona Terbuka (Multi-Merchant / UMKM)</span>
                     </div>
-                    <input
-                      type="radio"
-                      name="securityMode"
-                      checked={securityMode === 'DYNAMIC'}
-                      disabled={!!viewingMerchant}
-                      onChange={() => {}}
-                      className="text-emerald-500 focus:ring-emerald-500"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
-                    Cocok untuk food court, pasar, atau ruko berjejer. Memungkinkan banyak merchant resmi berdekatan tanpa saling memblokir transaksi satu sama lain.
-                  </p>
-                  <div className="flex items-center gap-2 mt-2.5">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Radius Standar: ±20m
+                      Coexistence
                     </span>
-                    <span className="text-[10px] text-slate-400">Multi-QR Coexistence</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                    Dirancang untuk pasar rakyat, pujasera/food court, mal, dan ruko berdampingan. Banyak merchant terdaftar resmi dapat beroperasi berdekatan dalam radius ±20m tanpa saling memblokir transaksi.
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5 text-[10px] text-slate-400">
+                    <span className="text-emerald-400 font-bold">✓ Multi-QR Aman</span>
+                    <span>• Toleransi radius fleksibel</span>
                   </div>
                 </div>
 
-                {/* Option 2: Mode Statis Eksklusif */}
+                {/* Zona Eksklusif */}
                 <div
                   onClick={() => {
                     if (viewingMerchant) return;
-                    setSecurityMode('EXCLUSIVE_STATIC');
+                    setSecurityMode('EXCLUSIVE_ZONE');
                     if (radiusMeters === 20) setRadiusMeters(60);
                     if (zoneCategory === 'UMKM') setZoneCategory('TEMPAT_IBADAH');
                   }}
                   className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
-                    securityMode === 'EXCLUSIVE_STATIC'
+                    securityMode === 'EXCLUSIVE_ZONE' || securityMode === 'EXCLUSIVE_STATIC'
                       ? 'bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-500/10'
                       : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
                   } ${viewingMerchant ? 'cursor-default' : ''}`}
@@ -591,25 +781,18 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <Lock className="w-4 h-4 text-amber-400" />
-                      <span>Mode Statis Eksklusif (Proteksi Tunggal)</span>
+                      <span>Zona Eksklusif (Single-Merchant / Terkunci)</span>
                     </div>
-                    <input
-                      type="radio"
-                      name="securityMode"
-                      checked={securityMode === 'EXCLUSIVE_STATIC'}
-                      disabled={!!viewingMerchant}
-                      onChange={() => {}}
-                      className="text-amber-500 focus:ring-amber-500"
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
-                    <strong>Hanya 1 QR resmi</strong> yang boleh aktif di zona ini. Jika ada QR liar lain discan di radius ini, transaksi otomatis <strong>DIBLOKIR KERAS</strong> (Anti-fraud kotak amal masjid &amp; RS).
-                  </p>
-                  <div className="flex items-center gap-2 mt-2.5">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Single-QR Lockdown
+                      Zero-Tolerance
                     </span>
-                    <span className="text-[10px] text-amber-400 font-medium">Keamanan Ekstra</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
+                    Khusus area yang butuh proteksi sterilisasi tinggi (Masjid, Gereja, RS, Kasir Darurat). <strong>Hanya 1 QR resmi</strong> yang boleh aktif. Jika ada QR liar lain discan di radius ini, transaksi otomatis <strong>DIBLOKIR KERAS</strong>.
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5 text-[10px] text-amber-400 font-bold">
+                    <span>🛑 Blokir Mutlak QR Asing</span>
+                    <span>• Proteksi Kotak Amal &amp; Fasilitas Publik</span>
                   </div>
                 </div>
               </div>
@@ -627,7 +810,7 @@ export default function MerchantPortalPage() {
                       const val = e.target.value as ZoneCategory;
                       setZoneCategory(val);
                       if (val === 'TEMPAT_IBADAH' || val === 'RUMAH_SAKIT' || val === 'INSTANSI') {
-                        setSecurityMode('EXCLUSIVE_STATIC');
+                        setSecurityMode('EXCLUSIVE_ZONE');
                         if (radiusMeters < 50) setRadiusMeters(60);
                       }
                     }}
@@ -681,6 +864,124 @@ export default function MerchantPortalPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── 3. FORM BUKTI FISIK TOKO & PRODUK (ANTI-SEMBARANGAN GENERATE) ── */}
+            <div className="p-4 rounded-2xl bg-[#141829] border border-amber-500/20 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400" />
+                  <span className="font-bold text-white text-xs">Berkas Verifikasi Fisik Toko &amp; Hal yang Dijual *</span>
+                </div>
+                <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30 font-medium">
+                  Wajib Lampirkan Bukti
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Demi mencegah sembarangan orang membuat QR palsu atau toko fiktif, pendaftar <strong>wajib melampirkan foto tempat usaha fisik</strong> dan <strong>foto barang dagangan</strong> sebelum stiker QR resmi dapat diterbitkan.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Upload Bukti 1: Tempat Usaha Fisik */}
+                <div className="p-3.5 rounded-2xl bg-[#0E1122] border border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>1. Foto Tempat Usaha / Etalase *</span>
+                    </label>
+                    {!viewingMerchant && (
+                      <button
+                        type="button"
+                        onClick={() => setStorePhotoUrl(SAMPLE_STORE_PHOTO)}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                      >
+                        Contoh Foto
+                      </button>
+                    )}
+                  </div>
+
+                  {storePhotoUrl ? (
+                    <div className="relative h-32 rounded-xl overflow-hidden border border-emerald-500/40 group">
+                      <img src={storePhotoUrl} alt="Foto Toko" className="w-full h-full object-cover" />
+                      {!viewingMerchant && (
+                        <button
+                          type="button"
+                          onClick={() => setStorePhotoUrl('')}
+                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <span className="absolute bottom-1 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/60 text-emerald-300 font-mono">
+                        ✓ Terlampir
+                      </span>
+                    </div>
+                  ) : (
+                    <label className="h-32 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/50 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors group bg-[#141829]/50">
+                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 mb-1.5 transition-colors" />
+                      <span className="text-[11px] font-semibold text-slate-300">Pilih / Unggah Foto Toko</span>
+                      <span className="text-[9px] text-slate-500">Maks. 3MB (JPG, PNG)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={!!viewingMerchant}
+                        onChange={e => handleFileChange(e, setStorePhotoUrl)}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Upload Bukti 2: Barang Dagangan / Produk */}
+                <div className="p-3.5 rounded-2xl bg-[#0E1122] border border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>2. Foto Produk / Hal yang Dijual *</span>
+                    </label>
+                    {!viewingMerchant && (
+                      <button
+                        type="button"
+                        onClick={() => setProductPhotoUrl(SAMPLE_PRODUCT_PHOTO)}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                      >
+                        Contoh Foto
+                      </button>
+                    )}
+                  </div>
+
+                  {productPhotoUrl ? (
+                    <div className="relative h-32 rounded-xl overflow-hidden border border-indigo-500/40 group">
+                      <img src={productPhotoUrl} alt="Foto Produk" className="w-full h-full object-cover" />
+                      {!viewingMerchant && (
+                        <button
+                          type="button"
+                          onClick={() => setProductPhotoUrl('')}
+                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <span className="absolute bottom-1 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/60 text-indigo-300 font-mono">
+                        ✓ Terlampir
+                      </span>
+                    </div>
+                  ) : (
+                    <label className="h-32 rounded-xl border-2 border-dashed border-white/15 hover:border-indigo-500/50 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors group bg-[#141829]/50">
+                      <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-400 mb-1.5 transition-colors" />
+                      <span className="text-[11px] font-semibold text-slate-300">Pilih / Unggah Foto Produk</span>
+                      <span className="text-[9px] text-slate-500">Maks. 3MB (JPG, PNG)</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={!!viewingMerchant}
+                        onChange={e => handleFileChange(e, setProductPhotoUrl)}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
             </div>
@@ -847,10 +1148,10 @@ export default function MerchantPortalPage() {
                   <th className="py-2.5 px-3">ID</th>
                   <th className="py-2.5 px-3">NMID</th>
                   <th className="py-2.5 px-3">Nama Merchant</th>
-                  <th className="py-2.5 px-3">Mode &amp; Zona</th>
+                  <th className="py-2.5 px-3">Tipe QRIS</th>
+                  <th className="py-2.5 px-3">Mode Keamanan Area</th>
                   <th className="py-2.5 px-3">WhatsApp Alert</th>
                   <th className="py-2.5 px-3">Kota</th>
-                  <th className="py-2.5 px-3">Koordinat (Lat, Lon)</th>
                   <th className="py-2.5 px-3">Geofence</th>
                   <th className="py-2.5 px-3 text-right">Aksi</th>
                 </tr>
@@ -859,6 +1160,8 @@ export default function MerchantPortalPage() {
                 {merchants.map(m => {
                   const hasConflict = nmidCounts[m.nmid] > 1;
                   const isSelected = viewingMerchant?.id === m.id;
+                  const isExclusive = m.security_mode === 'EXCLUSIVE_STATIC' || m.security_mode === 'EXCLUSIVE_ZONE';
+                  const isDynamic = m.qr_type === 'DINAMIS';
 
                   return (
                     <tr
@@ -888,13 +1191,43 @@ export default function MerchantPortalPage() {
                             </span>
                           )}
                         </div>
+                        {m.owner_nik && (
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            NIK: {m.owner_nik}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-3">
-                        {m.security_mode === 'EXCLUSIVE_STATIC' ? (
+                        {isDynamic ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 w-fit">
+                              <Sparkles className="w-3 h-3 text-purple-400" />
+                              <span>QRIS Dinamis</span>
+                            </span>
+                            {m.dynamic_amount && (
+                              <span className="block text-[9px] text-purple-300 font-mono">
+                                Rp {Number(m.dynamic_amount).toLocaleString('id-ID')}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                              <QrCode className="w-3 h-3 text-emerald-400" />
+                              <span>QRIS Statis</span>
+                            </span>
+                            <span className="block text-[9px] text-slate-400">
+                              Stiker Tetap
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        {isExclusive ? (
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 w-fit shadow-sm">
                               <Lock className="w-3 h-3 text-amber-400" />
-                              <span>Statis Eksklusif</span>
+                              <span>Zona Eksklusif</span>
                             </span>
                             <span className="block text-[9px] text-amber-400/80 font-medium">
                               {m.zone_category === 'TEMPAT_IBADAH'
@@ -903,17 +1236,17 @@ export default function MerchantPortalPage() {
                                 ? 'Rumah Sakit'
                                 : m.zone_category === 'INSTANSI'
                                 ? 'Instansi'
-                                : 'Area Khusus'}
+                                : 'Proteksi Tunggal'}
                             </span>
                           </div>
                         ) : (
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
                               <Store className="w-3 h-3 text-emerald-400" />
-                              <span>Dinamis</span>
+                              <span>Zona Terbuka</span>
                             </span>
                             <span className="block text-[9px] text-slate-400">
-                              Pedagang / UMKM
+                              Multi-Merchant (UMKM)
                             </span>
                           </div>
                         )}
@@ -928,12 +1261,9 @@ export default function MerchantPortalPage() {
                         )}
                       </td>
                       <td className="py-3 px-3 text-slate-300">{m.city || 'BANDUNG'}</td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-slate-400">
-                        {Number(m.latitude).toFixed(5)}, {Number(m.longitude).toFixed(5)}
-                      </td>
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
-                          m.security_mode === 'EXCLUSIVE_STATIC'
+                          isExclusive
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                             : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
                         }`}>
@@ -943,7 +1273,21 @@ export default function MerchantPortalPage() {
                       </td>
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Tombol Test WA langsung ke nomor merchant */}
+                          {/* Tombol Lihat Berkas Usaha */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProofMerchant(m);
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                            title="Lihat Bukti Foto Toko, Produk & NIK"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Berkas</span>
+                          </button>
+
+                          {/* Tombol Test WA */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -954,7 +1298,7 @@ export default function MerchantPortalPage() {
                             title={`Kirim Test WA ke ${m.wa_number || 'Nomor Admin'}`}
                           >
                             <Send className="w-3 h-3" />
-                            <span>Test WA</span>
+                            <span>WA</span>
                           </button>
 
                           {/* Tombol Lihat Lokasi GPS Realtime */}
@@ -972,7 +1316,7 @@ export default function MerchantPortalPage() {
                             title="Tampilkan Titik GPS di Peta (Read-Only)"
                           >
                             <MapPin className="w-3 h-3" />
-                            <span>{isSelected ? 'Sedang Dilihat' : 'Lokasi GPS'}</span>
+                            <span>{isSelected ? 'Peta' : 'Lokasi'}</span>
                           </button>
 
                           {/* Tombol Lihat Stiker QRIS */}
@@ -989,6 +1333,10 @@ export default function MerchantPortalPage() {
                                 longitude: Number(m.longitude),
                                 hasConflict,
                                 wa_number: m.wa_number,
+                                qr_type: m.qr_type,
+                                dynamic_amount: m.dynamic_amount,
+                                security_mode: m.security_mode,
+                                radius_meters: m.radius_meters,
                               });
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
@@ -1019,6 +1367,13 @@ export default function MerchantPortalPage() {
             </table>
           </div>
         </div>
+
+        {/* Modal Berkas Bukti Usaha */}
+        <ProofModal
+          isOpen={!!selectedProofMerchant}
+          onClose={() => setSelectedProofMerchant(null)}
+          merchant={selectedProofMerchant}
+        />
       </div>
     </div>
   );

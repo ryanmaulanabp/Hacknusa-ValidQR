@@ -31,6 +31,10 @@ interface StickerModalProps {
     rawPayload?: string;
     hasConflict?: boolean;
     wa_number?: string | null;
+    qr_type?: 'STATIS' | 'DINAMIS';
+    dynamic_amount?: number | null;
+    security_mode?: string;
+    radius_meters?: number;
   } | null;
 }
 
@@ -38,6 +42,8 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
   const [qrUrl, setQrUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const stickerCardRef = useRef<HTMLDivElement | null>(null);
+
+  const isDynamic = merchant?.qr_type === 'DINAMIS' || (merchant?.dynamic_amount != null && merchant.dynamic_amount > 0);
 
   useEffect(() => {
     if (!isOpen || !merchant) return;
@@ -57,7 +63,10 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
 
       const payload =
         merchant.rawPayload ||
-        buildDemoPayload(merchant.nmid, merchant.name, merchant.city || 'BANDUNG');
+        buildDemoPayload(merchant.nmid, merchant.name, merchant.city || 'BANDUNG', {
+          qrType: merchant.qr_type,
+          amount: merchant.dynamic_amount,
+        });
 
       try {
         const url = await QRCode.toDataURL(payload, {
@@ -134,7 +143,16 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
             {/* Top Red Bar: Official QRIS Header */}
             <div className="flex items-center justify-between pb-3 border-b-2 border-slate-100">
               <div className="text-left">
-                <span className="text-2xl font-black tracking-tighter text-[#D63031]">QRIS</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-2xl font-black tracking-tighter text-[#D63031]">QRIS</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                    isDynamic
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-emerald-600 text-white'
+                  }`}>
+                    {isDynamic ? 'Dinamis' : 'Statis'}
+                  </span>
+                </div>
                 <span className="block text-[8px] font-bold text-slate-500 uppercase tracking-tight">
                   Pembayaran Nasional
                 </span>
@@ -172,11 +190,31 @@ export default function StickerModal({ isOpen, onClose, merchant }: StickerModal
               )}
             </div>
 
+            {/* Dynamic Amount or Static Prompt */}
+            {isDynamic && merchant.dynamic_amount ? (
+              <div className="mt-2.5 p-2 bg-purple-50 border border-purple-200 rounded-xl">
+                <span className="text-[9px] uppercase font-bold text-purple-700 block tracking-wider">
+                  Nominal Transaksi Terkunci
+                </span>
+                <span className="text-base font-black text-purple-900">
+                  Rp {Number(merchant.dynamic_amount).toLocaleString('id-ID')}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-2 text-[9px] text-slate-400 font-medium">
+                Pindai &amp; masukkan nominal pembayaran pada e-wallet Anda
+              </p>
+            )}
+
             {/* Geofence Shield Badge */}
             <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>ValidQR Geofence: Radius 20m</span>
+                <span>
+                  {merchant.security_mode === 'EXCLUSIVE_STATIC' || merchant.security_mode === 'EXCLUSIVE_ZONE'
+                    ? `Zona Eksklusif: ±${merchant.radius_meters || 60}m`
+                    : `Zona Terbuka: ±${merchant.radius_meters || 20}m`}
+                </span>
               </div>
 
               {merchant.latitude && merchant.longitude && (

@@ -19,6 +19,8 @@ import {
   X,
   Lock,
   Store,
+  Sparkles,
+  QrCode,
 } from 'lucide-react';
 
 interface VerificationPopupProps {
@@ -221,6 +223,37 @@ export default function VerificationPopup({
             </div>
           )}
 
+          {/* QRIS Type & Dynamic Transaction Amount Card */}
+          {response.qr_type === 'DINAMIS' && response.transaction_amount ? (
+            <div className="p-3.5 rounded-2xl bg-purple-950/60 border border-purple-500/40 space-y-1 shadow-lg shadow-purple-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  QRIS Dinamis • Nominal Otomatis Terkunci
+                </span>
+                {response.invoice_number && (
+                  <span className="text-[10px] font-mono text-purple-300/80">
+                    {response.invoice_number}
+                  </span>
+                )}
+              </div>
+              <div className="text-2xl font-black text-white">
+                Rp {Number(response.transaction_amount).toLocaleString('id-ID')}
+              </div>
+              <p className="text-[10px] text-purple-200/80 leading-tight">
+                Nominal tagihan terkunci otomatis oleh sistem kasir resmi (Tag 54). Pembeli tidak perlu memasukkan nominal manual.
+              </p>
+            </div>
+          ) : (
+            <div className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-xs">
+              <span className="text-slate-300 flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Tipe QR: <strong>QRIS Statis (Stiker Fisik Tetap)</strong></span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">Input Nominal Manual</span>
+            </div>
+          )}
+
           {/* Scanned Merchant Card */}
           <div className={`p-4 rounded-2xl ${theme.cardBg} border border-white/10 space-y-2`}>
             <div className="flex items-center justify-between text-xs">
@@ -337,21 +370,31 @@ export default function VerificationPopup({
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
                       Kebijakan Area &amp; Mode Keamanan
                     </span>
-                    {response.security_mode === 'EXCLUSIVE_STATIC' ? (
+                    {response.security_mode === 'EXCLUSIVE_STATIC' || response.security_mode === 'EXCLUSIVE_ZONE' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        🛡️ Statis Eksklusif
+                        🛡️ Zona Eksklusif
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        🏪 Dinamis UMKM
+                        🏪 Zona Terbuka
                       </span>
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400 leading-snug">
-                    {response.security_mode === 'EXCLUSIVE_STATIC'
-                      ? `Single-QR Lockdown aktif (Radius ±${response.geofence_radius}m). Hanya QR resmi ${response.matched_name || ''} yang diizinkan beroperasi di lokasi ini.`
-                      : `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Pedagang resmi berdekatan aman bertransaksi tanpa saling memblokir.`}
+                    {response.security_mode === 'EXCLUSIVE_STATIC' || response.security_mode === 'EXCLUSIVE_ZONE'
+                      ? `Single-QR Lockdown aktif (Radius ±${response.geofence_radius}m). Hanya 1 QR resmi berizin (${response.matched_name || ''}) yang boleh aktif di zona ini. QR asing langsung diblokir seketika.`
+                      : `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Pedagang resmi berdampingan aman bertransaksi tanpa saling memblokir.`}
                   </div>
+                </div>
+
+                {/* Tipe QRIS Spesifikasi */}
+                <div className="p-2.5 rounded-xl bg-white/5 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <QrCode className="w-3 h-3 text-indigo-400" /> Spesifikasi Transaksi:
+                  </span>
+                  <span className="font-bold text-white">
+                    {response.qr_type === 'DINAMIS' ? 'QRIS Dinamis (EMVCo Tag 01="12")' : 'QRIS Statis (EMVCo Tag 01="11")'}
+                  </span>
                 </div>
               </div>
             )}

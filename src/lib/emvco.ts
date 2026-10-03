@@ -48,6 +48,11 @@ export const parseQRIS = (raw: string): QrPayload => {
     const additionalData = tlv.get('62') || '';
 
     let nmid = extractNmidFromTag62(additionalData);
+    let invoiceNumber: string | null = null;
+    if (additionalData) {
+      const subtags = parseTLV(additionalData);
+      invoiceNumber = subtags.get('01') || null;
+    }
 
     // Fallback: check tag 26 subtag 01 if tag 62.07 isn't present
     if (!nmid) {
@@ -58,6 +63,12 @@ export const parseQRIS = (raw: string): QrPayload => {
       }
     }
 
+    // Point of Initiation Method: 11 = Static, 12 = Dynamic
+    const poi = tlv.get('01') as '11' | '12' | undefined;
+    const amountStr = tlv.get('54');
+    const transactionAmount = amountStr ? parseFloat(amountStr) : null;
+    const qrType: 'STATIS' | 'DINAMIS' = poi === '12' || (transactionAmount != null && !isNaN(transactionAmount)) ? 'DINAMIS' : 'STATIS';
+
     if (merchantName || nmid) {
       return {
         nmid: nmid || 'ID_UNKNOWN',
@@ -66,6 +77,10 @@ export const parseQRIS = (raw: string): QrPayload => {
         postalCode,
         rawPayload: payload,
         crc,
+        qrType,
+        pointOfInitiationMethod: poi === '12' ? '12' : '11',
+        transactionAmount: transactionAmount != null && !isNaN(transactionAmount) ? transactionAmount : null,
+        invoiceNumber,
       };
     }
   } catch (e) {

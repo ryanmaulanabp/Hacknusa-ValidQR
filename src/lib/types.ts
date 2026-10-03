@@ -1,4 +1,5 @@
-export type SecurityMode = 'DYNAMIC' | 'EXCLUSIVE_STATIC';
+export type SecurityMode = 'DYNAMIC' | 'EXCLUSIVE_STATIC' | 'OPEN_ZONE' | 'EXCLUSIVE_ZONE';
+export type QrType = 'STATIS' | 'DINAMIS';
 export type ZoneCategory = 'UMKM' | 'TEMPAT_IBADAH' | 'RUMAH_SAKIT' | 'INSTANSI' | 'LAINNYA';
 
 export interface Merchant {
@@ -12,6 +13,12 @@ export interface Merchant {
   security_mode?: SecurityMode;
   zone_category?: ZoneCategory;
   radius_meters?: number;
+  qr_type?: QrType;
+  dynamic_amount?: number | null;
+  owner_nik?: string | null;
+  business_description?: string | null;
+  store_photo_url?: string | null;
+  product_photo_url?: string | null;
   is_active: boolean;
   is_auto_registered?: boolean;
   created_at: string;
@@ -41,6 +48,10 @@ export interface QrPayload {
   postalCode?: string;
   rawPayload: string;
   crc?: string;
+  qrType?: QrType;
+  pointOfInitiationMethod?: '11' | '12';
+  transactionAmount?: number | null;
+  invoiceNumber?: string | null;
 }
 
 export interface ScanResponse {
@@ -68,6 +79,9 @@ export interface ScanResponse {
   incident_id?: number;
   security_mode?: SecurityMode;
   zone_category?: ZoneCategory;
+  qr_type?: QrType;
+  transaction_amount?: number | null;
+  invoice_number?: string | null;
   exclusive_zone_detected?: boolean;
   exclusive_merchant_name?: string;
 }

@@ -164,22 +164,47 @@ function makeTlv(tag: string, value: string): string {
   return `${tag}${len}${value}`;
 }
 
-export function buildDemoPayload(nmid: string, name: string, city: string = 'BANDUNG'): string {
+export function buildDemoPayload(
+  nmid: string,
+  name: string,
+  city: string = 'BANDUNG',
+  options?: {
+    qrType?: 'STATIS' | 'DINAMIS';
+    amount?: number | null;
+    invoiceNumber?: string | null;
+  }
+): string {
+  const isDynamic = options?.qrType === 'DINAMIS' || (options?.amount != null && options.amount > 0);
+  const pointOfInitiation = isDynamic ? '12' : '11';
   const merchantAccountInfo = makeTlv('00', 'ID.CO.QRIS.WWW') + makeTlv('01', nmid);
-  const additionalDataField = makeTlv('07', nmid);
 
-  return (
+  let additionalDataField = makeTlv('07', nmid);
+  if (options?.invoiceNumber) {
+    additionalDataField = makeTlv('01', options.invoiceNumber) + additionalDataField;
+  }
+
+  let payload = (
     makeTlv('00', '01') +
-    makeTlv('01', '11') +
+    makeTlv('01', pointOfInitiation) +
     makeTlv('26', merchantAccountInfo) +
     '52045812' +
-    '5303360' +
+    '5303360'
+  );
+
+  if (isDynamic && options?.amount != null && options.amount > 0) {
+    const formattedAmount = options.amount.toFixed(2);
+    payload += makeTlv('54', formattedAmount);
+  }
+
+  payload += (
     makeTlv('58', 'ID') +
     makeTlv('59', name.substring(0, 25)) +
     makeTlv('60', city.substring(0, 15)) +
     makeTlv('62', additionalDataField) +
     '6304ABCD'
   );
+
+  return payload;
 }
 
 // Pre-built QRIS Payloads for HackNusa Demo
@@ -277,8 +302,25 @@ export const DEMO_PRESETS = {
     userLon: null,
     expectedColor: 'RED',
     expectedStatus: 'BLOCKED',
-    description: 'Scan QR resmi Masjid tetapi GPS smartphone mati/denied. Otomatis DIBLOKIR karena Mode Statis Eksklusif mewajibkan GPS aktif tanpa toleransi!',
+    description: 'Scan QR resmi Masjid tetapi GPS smartphone mati/denied. Otomatis DIBLOKIR karena Zona Eksklusif mewajibkan GPS aktif tanpa toleransi!',
     rawPayload: buildDemoPayload('ID10293847999', 'DKM MASJID SYAMSUL ULUM', 'BANDUNG'),
+  },
+  stickerDynamic: {
+    id: 'DYNAMIC_INVOICE',
+    label: 'Stiker I: QRIS Dinamis Kasir / POS (Nominal Terkunci Rp 35.000)',
+    nmid: 'ID10293847561',
+    merchantName: 'WARUNG BAKSO PAK BUDI',
+    city: 'BANDUNG',
+    userLat: SELARU_LAT,
+    userLon: SELARU_LON,
+    expectedColor: 'GREEN',
+    expectedStatus: 'VERIFIED',
+    description: 'QRIS Dinamis per transaksi kasir: nominal Rp 35.000 terkunci otomatis di Tag 54, invoice unik, aman dari manipulasi nominal.',
+    rawPayload: buildDemoPayload('ID10293847561', 'WARUNG BAKSO PAK BUDI', 'BANDUNG', {
+      qrType: 'DINAMIS',
+      amount: 35000,
+      invoiceNumber: 'INV-2026-001',
+    }),
   },
 };
 

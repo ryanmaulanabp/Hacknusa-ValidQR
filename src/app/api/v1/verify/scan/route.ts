@@ -18,12 +18,19 @@ export async function POST(req: NextRequest) {
     const gpsAvailable = userLat != null && userLon != null && !isNaN(Number(userLat)) && !isNaN(Number(userLon));
     const rawPayload = body.rawPayload || body.payload;
 
-    // If raw payload is passed, extract NMID and name using EMVCo parser
-    if (rawPayload && (!nmid || !scannedName)) {
+    let parsedQrType: 'STATIS' | 'DINAMIS' = 'STATIS';
+    let parsedAmount: number | null = null;
+    let parsedInvoice: string | null = null;
+
+    // If raw payload is passed, extract NMID, name, and dynamic metadata using EMVCo parser
+    if (rawPayload) {
       try {
         const parsed = parseQRIS(rawPayload);
         if (!nmid) nmid = parsed.nmid;
         if (!scannedName) scannedName = parsed.merchantName.toUpperCase().trim();
+        if (parsed.qrType) parsedQrType = parsed.qrType;
+        if (parsed.transactionAmount != null) parsedAmount = parsed.transactionAmount;
+        if (parsed.invoiceNumber) parsedInvoice = parsed.invoiceNumber;
       } catch (err) {
         console.warn('[ScanRoute] Error parsing raw payload:', err);
       }
@@ -103,6 +110,9 @@ export async function POST(req: NextRequest) {
         incident_id: incident.id,
         security_mode: resolvedSecurityMode,
         zone_category: resolvedZoneCategory,
+        qr_type: parsedQrType || (initialMerchants[0]?.qr_type) || 'STATIS',
+        transaction_amount: parsedAmount ?? (initialMerchants[0]?.dynamic_amount) ?? null,
+        invoice_number: parsedInvoice ?? null,
       };
 
       return NextResponse.json(response);
@@ -501,10 +511,13 @@ export async function POST(req: NextRequest) {
       conflict_count: merchants.length,
       conflict_names: merchants.map(m => ({ id: m.id, name: m.name })),
       incident_id: incident.id,
-      security_mode: primaryMerchant.security_mode || 'DYNAMIC',
+      security_mode: primaryMerchant.security_mode || 'OPEN_ZONE',
       zone_category: primaryMerchant.zone_category || 'UMKM',
-      exclusive_zone_detected: primaryMerchant.security_mode === 'EXCLUSIVE_STATIC',
-      exclusive_merchant_name: primaryMerchant.security_mode === 'EXCLUSIVE_STATIC' ? primaryMerchant.name : undefined,
+      qr_type: parsedQrType || primaryMerchant.qr_type || 'STATIS',
+      transaction_amount: parsedAmount ?? primaryMerchant.dynamic_amount ?? null,
+      invoice_number: parsedInvoice ?? (primaryMerchant.qr_type === 'DINAMIS' ? `INV-${primaryMerchant.id}` : null),
+      exclusive_zone_detected: primaryMerchant.security_mode === 'EXCLUSIVE_STATIC' || primaryMerchant.security_mode === 'EXCLUSIVE_ZONE',
+      exclusive_merchant_name: (primaryMerchant.security_mode === 'EXCLUSIVE_STATIC' || primaryMerchant.security_mode === 'EXCLUSIVE_ZONE') ? primaryMerchant.name : undefined,
     };
 
     return NextResponse.json(response);

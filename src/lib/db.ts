@@ -72,9 +72,15 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
         );
 
         -- Add columns if existing table didn't have them
-        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS security_mode VARCHAR(30) DEFAULT 'DYNAMIC';
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS security_mode VARCHAR(30) DEFAULT 'OPEN_ZONE';
         ALTER TABLE merchants ADD COLUMN IF NOT EXISTS zone_category VARCHAR(50) DEFAULT 'UMKM';
         ALTER TABLE merchants ADD COLUMN IF NOT EXISTS radius_meters INTEGER DEFAULT 20;
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS qr_type VARCHAR(20) DEFAULT 'STATIS';
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS dynamic_amount DECIMAL(12, 2);
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS owner_nik VARCHAR(20);
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS business_description TEXT;
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS store_photo_url TEXT;
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS product_photo_url TEXT;
 
         CREATE TABLE IF NOT EXISTS incident_logs (
           id              SERIAL PRIMARY KEY,
@@ -187,21 +193,53 @@ export async function createMerchant(data: {
   security_mode?: SecurityMode;
   zone_category?: ZoneCategory;
   radius_meters?: number;
+  qr_type?: 'STATIS' | 'DINAMIS';
+  dynamic_amount?: number | null;
+  owner_nik?: string | null;
+  business_description?: string | null;
+  store_photo_url?: string | null;
+  product_photo_url?: string | null;
   is_auto_registered?: boolean;
 }): Promise<Merchant> {
   const city = data.city || 'BANDUNG';
-  const security_mode = data.security_mode || 'DYNAMIC';
+  const security_mode = data.security_mode || 'OPEN_ZONE';
   const zone_category = data.zone_category || 'UMKM';
-  const radius_meters = data.radius_meters || (security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20);
+  const isExclusive = security_mode === 'EXCLUSIVE_STATIC' || security_mode === 'EXCLUSIVE_ZONE';
+  const radius_meters = data.radius_meters || (isExclusive ? 60 : 20);
+  const qr_type = data.qr_type || 'STATIS';
+  const dynamic_amount = data.dynamic_amount != null ? Number(data.dynamic_amount) : null;
 
   if (pool) {
     await ensureSchema();
     try {
       const res = await pool.query(
-        `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, security_mode, zone_category, radius_meters, is_active, is_auto_registered, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, NOW(), NOW())
+        `INSERT INTO merchants (
+          nmid, name, city, latitude, longitude, wa_number,
+          security_mode, zone_category, radius_meters,
+          qr_type, dynamic_amount, owner_nik, business_description,
+          store_photo_url, product_photo_url,
+          is_active, is_auto_registered, created_at, updated_at
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE, $16, NOW(), NOW())
          RETURNING *`,
-        [data.nmid, data.name, city, data.latitude, data.longitude, data.wa_number || null, security_mode, zone_category, radius_meters, !!data.is_auto_registered]
+        [
+          data.nmid,
+          data.name,
+          city,
+          data.latitude,
+          data.longitude,
+          data.wa_number || null,
+          security_mode,
+          zone_category,
+          radius_meters,
+          qr_type,
+          dynamic_amount,
+          data.owner_nik || null,
+          data.business_description || null,
+          data.store_photo_url || null,
+          data.product_photo_url || null,
+          !!data.is_auto_registered,
+        ]
       );
       return mapMerchantRow(res.rows[0]);
     } catch (err: any) {
@@ -222,6 +260,12 @@ export async function createMerchant(data: {
     security_mode,
     zone_category,
     radius_meters,
+    qr_type,
+    dynamic_amount,
+    owner_nik: data.owner_nik || null,
+    business_description: data.business_description || null,
+    store_photo_url: data.store_photo_url || null,
+    product_photo_url: data.product_photo_url || null,
     is_active: true,
     is_auto_registered: !!data.is_auto_registered,
     created_at: new Date().toISOString(),
@@ -393,9 +437,15 @@ function mapMerchantRow(row: any): Merchant {
     latitude: parseFloat(row.latitude),
     longitude: parseFloat(row.longitude),
     wa_number: row.wa_number,
-    security_mode: row.security_mode || 'DYNAMIC',
+    security_mode: row.security_mode || 'OPEN_ZONE',
     zone_category: row.zone_category || 'UMKM',
     radius_meters: row.radius_meters != null ? parseInt(row.radius_meters, 10) : 20,
+    qr_type: row.qr_type || 'STATIS',
+    dynamic_amount: row.dynamic_amount != null ? parseFloat(row.dynamic_amount) : null,
+    owner_nik: row.owner_nik || null,
+    business_description: row.business_description || null,
+    store_photo_url: row.store_photo_url || null,
+    product_photo_url: row.product_photo_url || null,
     is_active: row.is_active,
     is_auto_registered: row.is_auto_registered,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
@@ -404,7 +454,7 @@ function mapMerchantRow(row: any): Merchant {
 }
 
 /**
- * Check if user coordinates fall inside any active EXCLUSIVE_STATIC merchant zone,
+ * Check if user coordinates fall inside any active EXCLUSIVE_STATIC / EXCLUSIVE_ZONE merchant zone,
  * and whether the scanned NMID conflicts with that exclusive merchant.
  */
 export async function checkExclusiveZoneCollision(
@@ -422,7 +472,7 @@ export async function checkExclusiveZoneCollision(
 
   const allMerchants = await getAllMerchants();
   const exclusiveMerchants = allMerchants.filter(
-    m => m.is_active && m.security_mode === 'EXCLUSIVE_STATIC'
+    m => m.is_active && (m.security_mode === 'EXCLUSIVE_STATIC' || m.security_mode === 'EXCLUSIVE_ZONE')
   );
 
   for (const em of exclusiveMerchants) {
@@ -446,7 +496,7 @@ export async function checkExclusiveZoneCollision(
 }
 
 /**
- * Check if given coordinates fall inside any existing active EXCLUSIVE_STATIC merchant zone.
+ * Check if given coordinates fall inside any existing active EXCLUSIVE_STATIC / EXCLUSIVE_ZONE merchant zone.
  * Zero-Tolerance policy: strictly forbids registering any other merchant inside an exclusive static perimeter.
  */
 export async function checkRegistrationCollision(
@@ -464,7 +514,7 @@ export async function checkRegistrationCollision(
 
   const allMerchants = await getAllMerchants();
   const exclusiveMerchants = allMerchants.filter(
-    m => m.is_active && m.security_mode === 'EXCLUSIVE_STATIC' && (excludeMerchantId ? m.id !== excludeMerchantId : true)
+    m => m.is_active && (m.security_mode === 'EXCLUSIVE_STATIC' || m.security_mode === 'EXCLUSIVE_ZONE') && (excludeMerchantId ? m.id !== excludeMerchantId : true)
   );
 
   for (const em of exclusiveMerchants) {

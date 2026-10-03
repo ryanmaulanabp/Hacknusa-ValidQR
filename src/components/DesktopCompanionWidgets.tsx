@@ -264,6 +264,30 @@ export default function DesktopCompanionWidgets({
             </div>
             <ArrowRight className="w-4 h-4 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
           </button>
+
+          {/* Preset I: QRIS Dinamis Kasir (Nominal Terkunci) */}
+          <button
+            onClick={() => onRunPreset(DEMO_PRESETS.stickerDynamic)}
+            className="w-full p-3 rounded-2xl bg-purple-950/30 hover:bg-purple-900/40 border border-purple-500/30 text-left transition-all flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors flex items-center gap-1.5">
+                  <span>Stiker I: QRIS Dinamis Kasir POS</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                    Nominal Rp 35.000
+                  </span>
+                </div>
+                <div className="text-[10px] text-purple-400/80 font-mono">
+                  Tag 54 Terkunci Otomatis · VERIFIED
+                </div>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-purple-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
         </div>
       </div>
 
