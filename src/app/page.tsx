@@ -489,9 +489,5 @@ function MainAppContent() {
 }
 
 export default function Home() {
-  return (
-    <AppProvider>
-      <MainAppContent />
-    </AppProvider>
-  );
+  return <MainAppContent />;
 }

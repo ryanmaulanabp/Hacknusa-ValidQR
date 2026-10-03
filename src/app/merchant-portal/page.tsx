@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import { useApp } from '@/lib/LanguageContext';
 import { Merchant, SecurityMode, ZoneCategory, QrType } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
 import { haversineDistanceMeters } from '@/lib/geofence';
@@ -31,6 +32,7 @@ import {
   Check,
   Package,
   UserCheck,
+  Globe,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -46,6 +48,7 @@ const LocationPickerMap = dynamic(() => import('@/components/LocationPickerMap')
 });
 
 export default function MerchantPortalPage() {
+  const { t, isEnglish, toggleLanguage } = useApp();
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
@@ -305,34 +308,58 @@ export default function MerchantPortalPage() {
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return alert('Nama merchant wajib diisi!');
+    if (!name.trim()) {
+      return alert(isEnglish ? 'Merchant name is required!' : 'Nama merchant wajib diisi!');
+    }
 
     if (!ownerNik.trim() || !/^\d{16}$/.test(ownerNik.trim())) {
-      return alert('Validasi Gagal: NIK KTP penanggung jawab wajib 16 digit angka!');
+      return alert(
+        isEnglish
+          ? 'Validation Failed: National ID (NIK) of person in charge must be 16 numeric digits!'
+          : 'Validasi Gagal: NIK KTP penanggung jawab wajib 16 digit angka!'
+      );
     }
 
     if (!businessDescription.trim() || businessDescription.trim().length < 5) {
-      return alert('Validasi Gagal: Rincian barang dagangan / hal yang dijual wajib diisi minimal 5 karakter!');
+      return alert(
+        isEnglish
+          ? 'Validation Failed: Sold merchandise / goods details must be at least 5 characters!'
+          : 'Validasi Gagal: Rincian barang dagangan / hal yang dijual wajib diisi minimal 5 karakter!'
+      );
     }
 
     if (!storePhotoUrl) {
-      return alert('Validasi Gagal: Foto tempat usaha / etalase fisik toko wajib diunggah!');
+      return alert(
+        isEnglish
+          ? 'Validation Failed: Physical storefront / store photo is required!'
+          : 'Validasi Gagal: Foto tempat usaha / etalase fisik toko wajib diunggah!'
+      );
     }
 
     if (!productPhotoUrl) {
-      return alert('Validasi Gagal: Foto barang dagangan / produk yang dijual wajib diunggah!');
+      return alert(
+        isEnglish
+          ? 'Validation Failed: Merchandise / product photo is required!'
+          : 'Validasi Gagal: Foto barang dagangan / produk yang dijual wajib diunggah!'
+      );
     }
 
     if (qrType === 'DINAMIS') {
       const amt = parseFloat(dynamicAmount);
       if (isNaN(amt) || amt <= 0) {
-        return alert('Validasi Gagal: QRIS Dinamis mewajibkan nominal transaksi yang valid (lebih dari Rp 0)!');
+        return alert(
+          isEnglish
+            ? 'Validation Failed: Dynamic QRIS requires a valid transaction amount (> IDR 0)!'
+            : 'Validasi Gagal: QRIS Dinamis mewajibkan nominal transaksi yang valid (lebih dari Rp 0)!'
+        );
       }
     }
 
     if (exclusiveConflict) {
       return alert(
-        `🛑 Pendaftaran DITOLAK MUTLAK (Zero-Tolerance):\n\nTitik lokasi berada di dalam perimeter eksklusif "${exclusiveConflict.merchant.name}" (${exclusiveConflict.distance}m dari pusat, radius ${exclusiveConflict.radius}m).\n\nTidak boleh ada merchant atau QR lain yang beroperasi di zona ini demi keamanan fisik QRIS!`
+        isEnglish
+          ? `🛑 Registration REJECTED (Zero-Tolerance):\n\nLocation pin is inside exclusive perimeter "${exclusiveConflict.merchant.name}" (${exclusiveConflict.distance}m from center, radius ${exclusiveConflict.radius}m).\n\nNo other merchant or QR may operate in this zone for physical QRIS security!`
+          : `🛑 Pendaftaran DITOLAK MUTLAK (Zero-Tolerance):\n\nTitik lokasi berada di dalam perimeter eksklusif "${exclusiveConflict.merchant.name}" (${exclusiveConflict.distance}m dari pusat, radius ${exclusiveConflict.radius}m).\n\nTidak boleh ada merchant atau QR lain yang beroperasi di zona ini demi keamanan fisik QRIS!`
       );
     }
 
@@ -381,7 +408,7 @@ export default function MerchantPortalPage() {
         });
         fetchMerchants();
       } else {
-        alert(`Gagal: ${data.error}`);
+        alert(isEnglish ? `Failed: ${data.error}` : `Gagal: ${data.error}`);
       }
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -391,14 +418,14 @@ export default function MerchantPortalPage() {
   };
 
   const handleDeleteMerchant = async (id: number) => {
-    if (!confirm('Yakin ingin menghapus merchant ini?')) return;
+    if (!confirm(isEnglish ? 'Are you sure you want to delete this merchant?' : 'Yakin ingin menghapus merchant ini?')) return;
     try {
       const res = await fetch(`/api/v1/merchants/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         fetchMerchants();
       } else {
-        alert(`Gagal menghapus: ${data.error}`);
+        alert(isEnglish ? `Failed to delete: ${data.error}` : `Gagal menghapus: ${data.error}`);
       }
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -433,34 +460,45 @@ export default function MerchantPortalPage() {
             <div>
               <div className="flex items-center gap-2">
                 <Store className="w-5 h-5 text-indigo-400" />
-                <h1 className="text-2xl font-extrabold">ValidQR Merchant Portal</h1>
+                <h1 className="text-2xl font-extrabold">{t('mp_title')}</h1>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Pilih lokasi merchant dengan Leaflet, generate stiker QRIS, dan kelola database
+                {t('mp_subtitle')}
               </p>
               <div className="flex items-center gap-2 mt-2">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>WhatsApp Anti-Fraud Gateway: {waDeviceStatus?.connected ? 'Terhubung Aktif' : 'Tersambung'} ({waDeviceStatus?.device || '081224990680'})</span>
+                  <span>{t('mp_wa_gateway')} {waDeviceStatus?.connected ? t('mp_wa_active') : t('mp_wa_connected')} ({waDeviceStatus?.device || '081224990680'})</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Language Switch */}
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              title={isEnglish ? 'Switch to Bahasa Indonesia' : 'Ganti ke Bahasa Inggris'}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white font-bold text-xs transition-all cursor-pointer shadow-sm"
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-400" />
+              <span>{isEnglish ? 'EN' : 'ID'}</span>
+            </button>
+
             <Link
               href="/"
               className="px-3.5 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-xs border border-indigo-500/40 flex items-center gap-1.5 transition-all shadow-sm"
             >
               <QrCode className="w-4 h-4" />
-              <span>Buka Mobile App Scanner</span>
+              <span>{t('mp_open_scanner')}</span>
             </Link>
 
             <button
               onClick={fetchMerchants}
               disabled={loading}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
-              title="Refresh Data"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              title={t('mp_refresh_title')}
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -478,14 +516,20 @@ export default function MerchantPortalPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">Mode Lihat Lokasi GPS Merchant</span>
+                    <span className="text-xs font-bold text-white">
+                      {isEnglish ? 'Merchant GPS Location View Mode' : 'Mode Lihat Lokasi GPS Merchant'}
+                    </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
                       <Lock className="w-3 h-3" />
-                      Read-Only (Terkunci)
+                      {isEnglish ? 'Read-Only (Locked)' : 'Read-Only (Terkunci)'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-0.5">
-                    Menampilkan titik GPS real-time &amp; perimeter Geofence 20m untuk <strong className="text-white">{viewingMerchant.name}</strong> ({Number(viewingMerchant.latitude).toFixed(6)}, {Number(viewingMerchant.longitude).toFixed(6)}).
+                    {isEnglish ? (
+                      <>Displaying real-time GPS coordinates &amp; 20m Geofence perimeter for <strong className="text-white">{viewingMerchant.name}</strong> ({Number(viewingMerchant.latitude).toFixed(6)}, {Number(viewingMerchant.longitude).toFixed(6)}).</>
+                    ) : (
+                      <>Menampilkan titik GPS real-time &amp; perimeter Geofence 20m untuk <strong className="text-white">{viewingMerchant.name}</strong> ({Number(viewingMerchant.latitude).toFixed(6)}, {Number(viewingMerchant.longitude).toFixed(6)}).</>
+                    )}
                   </p>
                 </div>
               </div>
@@ -506,7 +550,7 @@ export default function MerchantPortalPage() {
                   className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
                 >
                   <QrCode className="w-3.5 h-3.5" />
-                  <span>Buka Stiker QRIS</span>
+                  <span>{isEnglish ? 'Open QRIS Sticker' : 'Buka Stiker QRIS'}</span>
                 </button>
                 <button
                   type="button"
@@ -514,7 +558,7 @@ export default function MerchantPortalPage() {
                   className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Tambah Merchant Baru</span>
+                  <span>{t('mp_btn_new_merchant')}</span>
                 </button>
               </div>
             </div>
@@ -526,19 +570,21 @@ export default function MerchantPortalPage() {
                 {viewingMerchant ? (
                   <>
                     <MapPin className="w-4 h-4 text-emerald-400" />
-                    <span>Lokasi GPS Realtime: {viewingMerchant.name}</span>
+                    <span>{t('mp_form_title_view')}: {viewingMerchant.name}</span>
                   </>
                 ) : (
                   <>
                     <Plus className="w-4 h-4 text-emerald-400" />
-                    <span>Registrasi Merchant &amp; Generate Stiker QRIS</span>
+                    <span>{t('mp_form_title_create')}</span>
                   </>
                 )}
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 {viewingMerchant
-                  ? 'Titik GPS dan radius toleransi geofence 20 meter ditampilkan secara realtime pada peta di bawah (read-only).'
-                  : 'Titik GPS yang Anda pilih pada peta di bawah akan menjadi batas perimeter geofence 20 meter'}
+                  ? (isEnglish
+                      ? 'GPS coordinates and 20-meter geofence tolerance radius displayed in real-time on map below (read-only).'
+                      : 'Titik GPS dan radius toleransi geofence 20 meter ditampilkan secara realtime pada peta di bawah (read-only).')
+                  : t('mp_form_subtitle')}
               </p>
             </div>
           </div>
@@ -547,14 +593,14 @@ export default function MerchantPortalPage() {
             {/* Merchant Identity Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-300 mb-1.5 font-semibold">Nama Merchant / Toko *</label>
+                <label className="block text-slate-300 mb-1.5 font-semibold">{t('mp_store_name')}</label>
                 <input
                   type="text"
                   required
                   disabled={!!viewingMerchant}
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Contoh: WARUNG BAKSO PAK BUDI"
+                  placeholder={isEnglish ? 'e.g. PAK BUDI MEATBALL RESTAURANT' : 'Contoh: WARUNG BAKSO PAK BUDI'}
                   className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
                     viewingMerchant
                       ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
@@ -564,7 +610,7 @@ export default function MerchantPortalPage() {
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1.5 font-semibold">Kota Merchant</label>
+                <label className="block text-slate-300 mb-1.5 font-semibold">{t('mp_city')}</label>
                 <input
                   type="text"
                   disabled={!!viewingMerchant}
@@ -584,8 +630,8 @@ export default function MerchantPortalPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-slate-300 mb-1.5 font-semibold flex items-center justify-between">
-                  <span>NIK KTP Pemilik Usaha *</span>
-                  <span className="text-[10px] text-indigo-400 font-mono">16 Digit Angka</span>
+                  <span>{t('mp_nik_label')}</span>
+                  <span className="text-[10px] text-indigo-400 font-mono">{t('mp_nik_badge')}</span>
                 </label>
                 <input
                   type="text"
@@ -594,7 +640,7 @@ export default function MerchantPortalPage() {
                   disabled={!!viewingMerchant}
                   value={ownerNik}
                   onChange={e => setOwnerNik(e.target.value.replace(/\D/g, ''))}
-                  placeholder="3204012345670001"
+                  placeholder={t('mp_nik_placeholder')}
                   className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
                     viewingMerchant
                       ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
@@ -605,14 +651,14 @@ export default function MerchantPortalPage() {
 
               <div>
                 <label className="block text-slate-300 mb-1.5 font-semibold">
-                  NMID (Opsional / Kosongkan untuk generate)
+                  {t('mp_nmid_optional')}
                 </label>
                 <input
                   type="text"
                   disabled={!!viewingMerchant}
                   value={nmid}
                   onChange={e => setNmid(e.target.value)}
-                  placeholder="Contoh: ID10293847561"
+                  placeholder={isEnglish ? 'e.g. ID10293847561' : 'Contoh: ID10293847561'}
                   className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
                     viewingMerchant
                       ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
@@ -623,7 +669,7 @@ export default function MerchantPortalPage() {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-slate-300 font-semibold">Nomor WhatsApp Alert</label>
+                  <label className="text-slate-300 font-semibold">{t('mp_wa_number')}</label>
                   <span className="text-[10px] text-emerald-400 font-mono">Fonnte</span>
                 </div>
                 <div className="flex gap-2">
@@ -631,7 +677,7 @@ export default function MerchantPortalPage() {
                     type="text"
                     value={waNumber}
                     onChange={e => setWaNumber(e.target.value)}
-                    placeholder="081234567890"
+                    placeholder={t('mp_wa_placeholder')}
                     className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#181B2F] border border-white/10 text-white focus:border-indigo-500 text-xs focus:outline-none"
                   />
                   {viewingMerchant && (
@@ -639,7 +685,8 @@ export default function MerchantPortalPage() {
                       type="button"
                       onClick={handleUpdateWaNumber}
                       disabled={isUpdatingWa || !waNumber.trim()}
-                      className="px-2.5 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0"
+                      className="px-2.5 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0 cursor-pointer"
+                      title={isUpdatingWa ? t('mp_wa_saving') : t('mp_wa_save_update')}
                     >
                       {isUpdatingWa ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                     </button>
@@ -648,7 +695,8 @@ export default function MerchantPortalPage() {
                     type="button"
                     onClick={() => handleTestWhatsApp(waNumber)}
                     disabled={waTesting || !waNumber.trim()}
-                    className="px-2.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0"
+                    className="px-2.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-1 transition-all disabled:opacity-50 shrink-0 cursor-pointer"
+                    title={t('mp_wa_test_btn')}
                   >
                     {waTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   </button>
@@ -659,8 +707,8 @@ export default function MerchantPortalPage() {
             {/* Business Description / Things Sold */}
             <div>
               <label className="block text-slate-300 mb-1.5 font-semibold flex items-center justify-between">
-                <span>Rincian Barang Dagangan / Hal yang Dijual *</span>
-                <span className="text-[10px] text-slate-400">Verifikasi Halal &amp; Komoditas Usaha</span>
+                <span>{t('mp_desc_label')}</span>
+                <span className="text-[10px] text-slate-400">{t('mp_desc_badge')}</span>
               </label>
               <input
                 type="text"
@@ -668,7 +716,7 @@ export default function MerchantPortalPage() {
                 disabled={!!viewingMerchant}
                 value={businessDescription}
                 onChange={e => setBusinessDescription(e.target.value)}
-                placeholder="Contoh: Menjual bakso urat, mie ayam, es teh manis, dan aneka minuman segar"
+                placeholder={t('mp_desc_placeholder')}
                 className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
                   viewingMerchant
                     ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
@@ -682,10 +730,10 @@ export default function MerchantPortalPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <QrCode className="w-4 h-4 text-indigo-400" />
-                  <span className="font-bold text-white text-xs">Pilihan Tipe QRIS (Standar Bank Indonesia)</span>
+                  <span className="font-bold text-white text-xs">{t('mp_qris_type_title')}</span>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 font-medium">
-                  ASPI EMVCo Spec
+                  {t('mp_qris_spec_badge')}
                 </span>
               </div>
 
@@ -705,17 +753,17 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <QrCode className="w-4 h-4 text-emerald-400" />
-                      <span>QRIS Statis (Stiker Tetap)</span>
+                      <span>{t('mp_qris_static_title')}</span>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
-                      Stiker Fisik
+                      {t('mp_qris_static_badge')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                    Jenis kode QR yang tetap dan tidak berubah, digunakan untuk memfasilitasi pembayaran berulang kali di suatu lokasi. Pelanggan memindai lalu memasukkan nominal pembayaran di dompet digital.
+                    {t('mp_qris_static_desc')}
                   </p>
                   <div className="mt-2.5 text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Cocok untuk meja kasir, etalase, gerobak, &amp; kotak amal
+                    <Check className="w-3 h-3" /> {t('mp_qris_static_tip')}
                   </div>
                 </div>
 
@@ -734,20 +782,20 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <Sparkles className="w-4 h-4 text-purple-400" />
-                      <span>QRIS Dinamis (Kasir / Per Transaksi)</span>
+                      <span>{t('mp_qris_dynamic_title')}</span>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
-                      Nominal Terkunci
+                      {t('mp_qris_dynamic_badge')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                    Jenis kode QR yang berubah untuk setiap transaksi. Kode QR memuat jumlah yang harus dibayar secara otomatis (Tag 54) dan nomor tagihan unik, sehingga mengurangi risiko penipuan nominal.
+                    {t('mp_qris_dynamic_desc')}
                   </p>
 
                   {/* Input Nominal Transaksi jika QRIS Dinamis */}
                   {qrType === 'DINAMIS' && (
                     <div className="mt-3 pt-2.5 border-t border-purple-500/30 flex items-center gap-2">
-                      <span className="text-[11px] font-bold text-purple-300 shrink-0">Nominal Tagihan: Rp</span>
+                      <span className="text-[11px] font-bold text-purple-300 shrink-0">{t('mp_qris_amount_label')}</span>
                       <input
                         type="number"
                         min="1000"
@@ -764,14 +812,14 @@ export default function MerchantPortalPage() {
               </div>
             </div>
 
-            {/* ── 2. MODE KEAMANAN LOKASI: ZONA TERBUKA VS ZONA EKSKLUSIF (NAMA BARU) ── */}
+            {/* ── 2. MODE KEAMANAN LOKASI: ZONA TERBUKA VS ZONA EKSKLUSIF ── */}
             <div className="p-4 rounded-2xl bg-[#141829] border border-white/10 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                  <span className="font-bold text-white text-xs">Kebijakan Area &amp; Mode Keamanan Lokasi (Geofencing)</span>
+                  <span className="font-bold text-white text-xs">{t('mp_sec_title')}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-mono">ValidQR Location Guard</span>
+                <span className="text-[10px] text-slate-400 font-mono">{t('mp_sec_spec_badge')}</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -794,18 +842,17 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <Store className="w-4 h-4 text-emerald-400" />
-                      <span>Zona Terbuka (Multi-Merchant / UMKM)</span>
+                      <span>{t('mp_open_zone_title')}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Coexistence
+                      {t('mp_open_zone_badge')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                    Dirancang untuk pasar rakyat, pujasera/food court, mal, dan ruko berdampingan. Banyak merchant terdaftar resmi dapat beroperasi berdekatan dalam radius ±20m tanpa saling memblokir transaksi.
+                    {t('mp_open_zone_desc')}
                   </p>
                   <div className="flex items-center gap-2 mt-2.5 text-[10px] text-slate-400">
-                    <span className="text-emerald-400 font-bold">✓ Multi-QR Aman</span>
-                    <span>• Toleransi radius fleksibel</span>
+                    <span className="text-emerald-400 font-bold">✓ {t('mp_open_zone_tip')}</span>
                   </div>
                 </div>
 
@@ -826,18 +873,17 @@ export default function MerchantPortalPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2 font-bold text-xs text-white">
                       <Lock className="w-4 h-4 text-amber-400" />
-                      <span>Zona Eksklusif (Single-Merchant / Terkunci)</span>
+                      <span>{t('mp_exclusive_zone_title')}</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Zero-Tolerance
+                      {t('mp_exclusive_zone_badge')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 mt-2 leading-relaxed">
-                    Khusus area yang butuh proteksi sterilisasi tinggi (Masjid, Gereja, RS, Kasir Darurat). <strong>Hanya 1 QR resmi</strong> yang boleh aktif. Jika ada QR liar lain discan di radius ini, transaksi otomatis <strong>DIBLOKIR KERAS</strong>.
+                    {t('mp_exclusive_zone_desc')}
                   </p>
                   <div className="flex items-center gap-2 mt-2.5 text-[10px] text-amber-400 font-bold">
-                    <span>🛑 Blokir Mutlak QR Asing</span>
-                    <span>• Proteksi Kotak Amal &amp; Fasilitas Publik</span>
+                    <span>{t('mp_exclusive_zone_tip')}</span>
                   </div>
                 </div>
               </div>
@@ -846,7 +892,7 @@ export default function MerchantPortalPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-white/5">
                 <div>
                   <label className="block text-slate-300 mb-1.5 font-semibold text-xs">
-                    Kategori Kawasan
+                    {t('mp_category_label')}
                   </label>
                   <select
                     disabled={!!viewingMerchant}
@@ -865,18 +911,18 @@ export default function MerchantPortalPage() {
                         : 'border-white/10 text-white focus:border-indigo-500'
                     } text-xs focus:outline-none`}
                   >
-                    <option value="UMKM">🏪 Pedagang / UMKM / Kuliner (Pasar/Food Court)</option>
-                    <option value="TEMPAT_IBADAH">🕌 Tempat Ibadah (Masjid / Gereja / Kotak Amal)</option>
-                    <option value="RUMAH_SAKIT">🏥 Fasilitas Kesehatan / Rumah Sakit / Kasir Darurat</option>
-                    <option value="INSTANSI">🏛️ Kantor Instansi / Layanan Publik Pemerintah</option>
-                    <option value="LAINNYA">🏢 Area Khusus Lainnya</option>
+                    <option value="UMKM">{t('mp_cat_umkm')}</option>
+                    <option value="TEMPAT_IBADAH">{t('mp_cat_worship')}</option>
+                    <option value="RUMAH_SAKIT">{t('mp_cat_hospital')}</option>
+                    <option value="INSTANSI">{t('mp_cat_gov')}</option>
+                    <option value="LAINNYA">{t('mp_cat_other')}</option>
                   </select>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-slate-300 font-semibold text-xs">
-                      Radius Perimeter Geofence
+                      {t('mp_radius_label')}
                     </label>
                     <span className="text-indigo-400 font-mono font-bold text-xs">±{radiusMeters} Meter</span>
                   </div>
@@ -902,7 +948,7 @@ export default function MerchantPortalPage() {
                             radiusMeters === r
                               ? 'bg-indigo-600 text-white border-indigo-500'
                               : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
-                          } disabled:opacity-50`}
+                          } disabled:opacity-50 cursor-pointer`}
                         >
                           {r}m
                         </button>
@@ -913,19 +959,19 @@ export default function MerchantPortalPage() {
               </div>
             </div>
 
-            {/* ── 3. FORM BUKTI FISIK TOKO & PRODUK (ANTI-SEMBARANGAN GENERATE) ── */}
+            {/* ── 3. FORM BUKTI FISIK TOKO & PRODUK ── */}
             <div className="p-4 rounded-2xl bg-[#141829] border border-amber-500/20 space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <span className="font-bold text-white text-xs">Berkas Verifikasi Fisik Toko &amp; Hal yang Dijual *</span>
+                  <span className="font-bold text-white text-xs">{t('mp_proof_section_title')}</span>
                 </div>
                 <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30 font-medium">
-                  Wajib Lampirkan Bukti
+                  {t('mp_proof_section_badge')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                Demi mencegah sembarangan orang membuat QR palsu atau toko fiktif, pendaftar <strong>wajib melampirkan foto tempat usaha fisik</strong> dan <strong>foto barang dagangan</strong> sebelum stiker QR resmi dapat diterbitkan.
+                {t('mp_proof_section_desc')}
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -934,7 +980,7 @@ export default function MerchantPortalPage() {
                   <div className="flex items-center justify-between">
                     <label className="font-bold text-white text-xs flex items-center gap-1.5">
                       <Store className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>1. Foto Tempat Usaha / Etalase *</span>
+                      <span>{t('mp_proof_store_label')}</span>
                     </label>
                     {!viewingMerchant && (
                       <button
@@ -942,7 +988,7 @@ export default function MerchantPortalPage() {
                         onClick={() => setStorePhotoUrl(SAMPLE_STORE_PHOTO)}
                         className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
                       >
-                        Contoh Foto
+                        {t('mp_sample_link')}
                       </button>
                     )}
                   </div>
@@ -954,20 +1000,20 @@ export default function MerchantPortalPage() {
                         <button
                           type="button"
                           onClick={() => setStorePhotoUrl('')}
-                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs"
+                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <span className="absolute bottom-1 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/60 text-emerald-300 font-mono">
-                        ✓ Terlampir
+                        {t('mp_attached_badge')}
                       </span>
                     </div>
                   ) : (
                     <label className="h-32 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/50 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors group bg-[#141829]/50">
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-emerald-400 mb-1.5 transition-colors" />
-                      <span className="text-[11px] font-semibold text-slate-300">Pilih / Unggah Foto Toko</span>
-                      <span className="text-[9px] text-slate-500">Maks. 3MB (JPG, PNG)</span>
+                      <span className="text-[11px] font-semibold text-slate-300">{t('mp_upload_store_hint')}</span>
+                      <span className="text-[9px] text-slate-500">{t('mp_upload_subhint')}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -984,7 +1030,7 @@ export default function MerchantPortalPage() {
                   <div className="flex items-center justify-between">
                     <label className="font-bold text-white text-xs flex items-center gap-1.5">
                       <Package className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>2. Foto Produk / Hal yang Dijual *</span>
+                      <span>{t('mp_proof_product_label')}</span>
                     </label>
                     {!viewingMerchant && (
                       <button
@@ -992,7 +1038,7 @@ export default function MerchantPortalPage() {
                         onClick={() => setProductPhotoUrl(SAMPLE_PRODUCT_PHOTO)}
                         className="text-[10px] text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
                       >
-                        Contoh Foto
+                        {t('mp_sample_link')}
                       </button>
                     )}
                   </div>
@@ -1004,20 +1050,20 @@ export default function MerchantPortalPage() {
                         <button
                           type="button"
                           onClick={() => setProductPhotoUrl('')}
-                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs"
+                          className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-rose-400 hover:text-rose-300 text-xs cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                       <span className="absolute bottom-1 left-2 text-[9px] px-1.5 py-0.5 rounded bg-black/60 text-indigo-300 font-mono">
-                        ✓ Terlampir
+                        {t('mp_attached_badge')}
                       </span>
                     </div>
                   ) : (
                     <label className="h-32 rounded-xl border-2 border-dashed border-white/15 hover:border-indigo-500/50 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-colors group bg-[#141829]/50">
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-400 mb-1.5 transition-colors" />
-                      <span className="text-[11px] font-semibold text-slate-300">Pilih / Unggah Foto Produk</span>
-                      <span className="text-[9px] text-slate-500">Maks. 3MB (JPG, PNG)</span>
+                      <span className="text-[11px] font-semibold text-slate-300">{t('mp_upload_prod_hint')}</span>
+                      <span className="text-[9px] text-slate-500">{t('mp_upload_subhint')}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1037,12 +1083,16 @@ export default function MerchantPortalPage() {
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-4 h-4 text-emerald-400" />
                   {viewingMerchant
-                    ? `Lokasi GPS Terdaftar (Perimeter ±${radiusMeters}m • Read-Only)`
-                    : `Pilih Titik Lokasi Merchant pada Peta (Radius Proteksi ±${radiusMeters}m)`}
+                    ? (isEnglish
+                        ? `Registered GPS Location (Perimeter ±${radiusMeters}m • Read-Only)`
+                        : `Lokasi GPS Terdaftar (Perimeter ±${radiusMeters}m • Read-Only)`)
+                    : (isEnglish
+                        ? `Select Merchant Location on Map (Protection Radius ±${radiusMeters}m)`
+                        : `Pilih Titik Lokasi Merchant pada Peta (Radius Proteksi ±${radiusMeters}m)`)}
                 </span>
                 {viewingMerchant && (
                   <span className="text-[10px] text-emerald-300 font-normal flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Peta Terkunci
+                    <Lock className="w-3 h-3" /> {isEnglish ? 'Map Locked' : 'Peta Terkunci'}
                   </span>
                 )}
               </label>
@@ -1064,7 +1114,9 @@ export default function MerchantPortalPage() {
 
               <div className="grid grid-cols-2 gap-4 pt-1">
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">Latitude Terpilih</span>
+                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">
+                    {isEnglish ? 'Selected Latitude' : 'Latitude Terpilih'}
+                  </span>
                   <input
                     type="number"
                     step="any"
@@ -1079,7 +1131,9 @@ export default function MerchantPortalPage() {
                   />
                 </div>
                 <div>
-                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">Longitude Terpilih</span>
+                  <span className="block text-[10px] text-slate-400 mb-1 font-mono">
+                    {isEnglish ? 'Selected Longitude' : 'Longitude Terpilih'}
+                  </span>
                   <input
                     type="number"
                     step="any"
@@ -1102,13 +1156,21 @@ export default function MerchantPortalPage() {
                 <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-1">
                   <div className="font-extrabold text-white flex items-center gap-1.5">
-                    <span>🛑 Pelanggaran Perimeter Zero-Tolerance</span>
+                    <span>🛑 {isEnglish ? 'Zero-Tolerance Perimeter Violation' : 'Pelanggaran Perimeter Zero-Tolerance'}</span>
                     <span className="text-[10px] px-2 py-0.5 bg-rose-500/30 text-rose-200 rounded-full border border-rose-500/40 font-bold uppercase tracking-wider">
-                      Dilarang Mutlak
+                      {isEnglish ? 'Strictly Prohibited' : 'Dilarang Mutlak'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Koordinat pin terpilih berjarak <strong>{exclusiveConflict.distance}m</strong>, berada di dalam radius <strong>{exclusiveConflict.radius}m</strong> Zona Statis Eksklusif <strong className="text-white">{exclusiveConflict.merchant.name}</strong>. Pendaftaran merchant atau stiker QR baru di perimeter ini dilarang demi keamanan fisik QRIS!
+                    {isEnglish ? (
+                      <>
+                        Selected pin is at <strong>{exclusiveConflict.distance}m</strong>, within the <strong>{exclusiveConflict.radius}m</strong> radius of Exclusive Zone <strong className="text-white">{exclusiveConflict.merchant.name}</strong>. Registering new merchants or QR stickers in this perimeter is prohibited for physical QRIS security!
+                      </>
+                    ) : (
+                      <>
+                        Koordinat pin terpilih berjarak <strong>{exclusiveConflict.distance}m</strong>, berada di dalam radius <strong>{exclusiveConflict.radius}m</strong> Zona Statis Eksklusif <strong className="text-white">{exclusiveConflict.merchant.name}</strong>. Pendaftaran merchant atau stiker QR baru di perimeter ini dilarang demi keamanan fisik QRIS!
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -1134,7 +1196,7 @@ export default function MerchantPortalPage() {
                     className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
                   >
                     <QrCode className="w-4 h-4" />
-                    <span>Lihat / Cetak Stiker QRIS</span>
+                    <span>{isEnglish ? 'View / Print QRIS Sticker' : 'Lihat / Cetak Stiker QRIS'}</span>
                   </button>
 
                   <button
@@ -1143,7 +1205,7 @@ export default function MerchantPortalPage() {
                     className="w-full py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm flex items-center justify-center gap-2 border border-white/10 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4 text-emerald-400" />
-                    <span>Buat Merchant Baru</span>
+                    <span>{t('mp_btn_new_merchant')}</span>
                   </button>
                 </div>
               ) : (
@@ -1157,16 +1219,16 @@ export default function MerchantPortalPage() {
                   }`}
                 >
                   {isSubmitting ? (
-                    <span>Sedang Membuat Stiker QRIS...</span>
+                    <span>{t('mp_btn_submitting')}</span>
                   ) : exclusiveConflict ? (
                     <>
                       <ShieldAlert className="w-4 h-4 text-rose-400" />
-                      <span>Ditolak: Masuk Perimeter Zona Statis ({exclusiveConflict.merchant.name})</span>
+                      <span>{isEnglish ? `Rejected: Inside Static Perimeter (${exclusiveConflict.merchant.name})` : `Ditolak: Masuk Perimeter Zona Statis (${exclusiveConflict.merchant.name})`}</span>
                     </>
                   ) : (
                     <>
                       <QrCode className="w-4 h-4" />
-                      <span>Generate &amp; Tampilkan Stiker QRIS</span>
+                      <span>{t('mp_btn_submit_create')}</span>
                     </>
                   )}
                 </button>
@@ -1179,9 +1241,9 @@ export default function MerchantPortalPage() {
         <div className="p-6 rounded-3xl bg-[#101424] border border-white/10 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-white">Daftar Merchant Terdaftar ({merchants.length})</h2>
+              <h2 className="text-sm font-bold text-white">{t('mp_table_title')} ({merchants.length})</h2>
               <p className="text-xs text-slate-400">
-                Klik baris merchant mana saja untuk melihat titik lokasi GPS di peta secara realtime (Read-Only)
+                {t('mp_table_subtitle')}
               </p>
             </div>
           </div>
@@ -1192,13 +1254,13 @@ export default function MerchantPortalPage() {
                 <tr className="border-b border-white/10 text-slate-400">
                   <th className="py-2.5 px-3">ID</th>
                   <th className="py-2.5 px-3">NMID</th>
-                  <th className="py-2.5 px-3">Nama Merchant</th>
-                  <th className="py-2.5 px-3">Tipe QRIS</th>
-                  <th className="py-2.5 px-3">Mode Keamanan Area</th>
-                  <th className="py-2.5 px-3">WhatsApp Alert</th>
-                  <th className="py-2.5 px-3">Kota</th>
-                  <th className="py-2.5 px-3">Geofence</th>
-                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                  <th className="py-2.5 px-3">{t('mp_col_merchant')}</th>
+                  <th className="py-2.5 px-3">{t('mp_col_type')}</th>
+                  <th className="py-2.5 px-3">{t('mp_col_mode')}</th>
+                  <th className="py-2.5 px-3">{t('mp_col_wa')}</th>
+                  <th className="py-2.5 px-3">{t('receipt_city')}</th>
+                  <th className="py-2.5 px-3">{t('mp_col_coords')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('mp_col_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1232,7 +1294,7 @@ export default function MerchantPortalPage() {
                           <span>{m.name}</span>
                           {isSelected && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              Aktif di Peta
+                              {isEnglish ? 'Active on Map' : 'Aktif di Peta'}
                             </span>
                           )}
                         </div>
@@ -1247,7 +1309,7 @@ export default function MerchantPortalPage() {
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1 w-fit">
                               <Sparkles className="w-3 h-3 text-purple-400" />
-                              <span>QRIS Dinamis</span>
+                              <span>{isEnglish ? 'Dynamic QRIS' : 'QRIS Dinamis'}</span>
                             </span>
                             {m.dynamic_amount && (
                               <span className="block text-[9px] text-purple-300 font-mono">
@@ -1259,10 +1321,10 @@ export default function MerchantPortalPage() {
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
                               <QrCode className="w-3 h-3 text-emerald-400" />
-                              <span>QRIS Statis</span>
+                              <span>{isEnglish ? 'Static QRIS' : 'QRIS Statis'}</span>
                             </span>
                             <span className="block text-[9px] text-slate-400">
-                              Stiker Tetap
+                              {t('mp_qris_static_badge')}
                             </span>
                           </div>
                         )}
@@ -1272,26 +1334,26 @@ export default function MerchantPortalPage() {
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 w-fit shadow-sm">
                               <Lock className="w-3 h-3 text-amber-400" />
-                              <span>Zona Eksklusif</span>
+                              <span>{isEnglish ? 'Exclusive Zone' : 'Zona Eksklusif'}</span>
                             </span>
                             <span className="block text-[9px] text-amber-400/80 font-medium">
                               {m.zone_category === 'TEMPAT_IBADAH'
-                                ? 'Tempat Ibadah'
+                                ? (isEnglish ? 'Place of Worship' : 'Tempat Ibadah')
                                 : m.zone_category === 'RUMAH_SAKIT'
-                                ? 'Rumah Sakit'
+                                ? (isEnglish ? 'Hospital' : 'Rumah Sakit')
                                 : m.zone_category === 'INSTANSI'
-                                ? 'Instansi'
-                                : 'Proteksi Tunggal'}
+                                ? (isEnglish ? 'Government' : 'Instansi')
+                                : (isEnglish ? 'Single Protection' : 'Proteksi Tunggal')}
                             </span>
                           </div>
                         ) : (
                           <div className="space-y-0.5">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
                               <Store className="w-3 h-3 text-emerald-400" />
-                              <span>Zona Terbuka</span>
+                              <span>{isEnglish ? 'Open Zone' : 'Zona Terbuka'}</span>
                             </span>
                             <span className="block text-[9px] text-slate-400">
-                              Multi-Merchant (UMKM)
+                              {isEnglish ? 'Multi-Merchant' : 'Multi-Merchant (UMKM)'}
                             </span>
                           </div>
                         )}
@@ -1326,10 +1388,10 @@ export default function MerchantPortalPage() {
                               setSelectedProofMerchant(m);
                             }}
                             className="px-2 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
-                            title="Lihat Bukti Foto Toko, Produk & NIK"
+                            title={isEnglish ? 'View Store, Product & NIK Proofs' : 'Lihat Bukti Foto Toko, Produk & NIK'}
                           >
                             <FileText className="w-3 h-3" />
-                            <span>Berkas</span>
+                            <span>{t('mp_btn_inspect_docs')}</span>
                           </button>
 
                           {/* Tombol Test WA */}
@@ -1340,7 +1402,7 @@ export default function MerchantPortalPage() {
                               handleTestWhatsApp(m.wa_number || undefined);
                             }}
                             className="px-2 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer"
-                            title={`Kirim Test WA ke ${m.wa_number || 'Nomor Admin'}`}
+                            title={isEnglish ? `Send Test WA to ${m.wa_number || 'Admin Number'}` : `Kirim Test WA ke ${m.wa_number || 'Nomor Admin'}`}
                           >
                             <Send className="w-3 h-3" />
                             <span>WA</span>
@@ -1358,10 +1420,10 @@ export default function MerchantPortalPage() {
                                 ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
                                 : 'bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30'
                             }`}
-                            title="Tampilkan Titik GPS di Peta (Read-Only)"
+                            title={isEnglish ? 'Show GPS Point on Map (Read-Only)' : 'Tampilkan Titik GPS di Peta (Read-Only)'}
                           >
                             <MapPin className="w-3 h-3" />
-                            <span>{isSelected ? 'Peta' : 'Lokasi'}</span>
+                            <span>{isSelected ? (isEnglish ? 'Map' : 'Peta') : (isEnglish ? 'Location' : 'Lokasi')}</span>
                           </button>
 
                           {/* Tombol Lihat Stiker QRIS */}
@@ -1385,10 +1447,10 @@ export default function MerchantPortalPage() {
                               });
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 font-semibold text-[11px] border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
-                            title="Lihat / Cetak Stiker QRIS"
+                            title={isEnglish ? 'View / Print QRIS Sticker' : 'Lihat / Cetak Stiker QRIS'}
                           >
                             <QrCode className="w-3 h-3" />
-                            <span>Stiker</span>
+                            <span>{t('mp_btn_print_qr')}</span>
                           </button>
 
                           {/* Tombol Hapus */}
@@ -1399,7 +1461,7 @@ export default function MerchantPortalPage() {
                               handleDeleteMerchant(m.id);
                             }}
                             className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors cursor-pointer"
-                            title="Hapus Merchant"
+                            title={isEnglish ? 'Delete Merchant' : 'Hapus Merchant'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
