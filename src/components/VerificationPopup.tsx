@@ -177,14 +177,27 @@ export default function VerificationPopup({
             </div>
           </div>
 
-          {/* WhatsApp Alert Notice if Blocked */}
-          {isBlocked && (
+          {/* WhatsApp Alert Notice if Blocked (Only on actual fraud attempts, not on missing GPS) */}
+          {isBlocked && response.reason !== 'GPS_REQUIRED' && (
             <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 flex items-start gap-2.5">
               <Send className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div className="text-[11px] leading-tight">
                 <span className="font-bold text-emerald-400">WhatsApp Alert Terkirim:</span>
                 <p className="text-slate-300 mt-0.5">
                   Notifikasi fraud otomatis dikirimkan ke nomor WhatsApp merchant terdaftar untuk segera memeriksa fisik stiker QRIS di lokasi.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* GPS Required Notice */}
+          {response.reason === 'GPS_REQUIRED' && (
+            <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 flex items-start gap-2.5">
+              <MapPin className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-[11px] leading-tight">
+                <span className="font-bold text-amber-300">Sinyal GPS Diperlukan:</span>
+                <p className="text-slate-300 mt-0.5">
+                  Sistem ValidQR mewajibkan GPS aktif pada ponsel untuk mencocokkan posisi fisik merchant. Silakan nyalakan GPS pada smartphone Anda lalu lakukan scan ulang.
                 </p>
               </div>
             </div>
@@ -290,7 +303,11 @@ export default function VerificationPopup({
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                       Layer 3: GPS Geofencing (±{response.geofence_radius}m)
                     </span>
-                    {response.location_check === 'MATCH' ? (
+                    {response.reason === 'GPS_REQUIRED' ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        ✗ GPS Wajib Aktif
+                      </span>
+                    ) : response.location_check === 'MATCH' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                         ✓ Dalam Radius
                       </span>
@@ -300,12 +317,16 @@ export default function VerificationPopup({
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        ? GPS Skipped
+                        ? GPS Tidak Aktif
                       </span>
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    Jarak terhitung: <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : 'Tidak tersedia'}</span> (Radius perimeter: {response.geofence_radius}m)
+                    {response.reason === 'GPS_REQUIRED' ? (
+                      <span className="text-rose-300 font-medium">Koordinat GPS tidak tersedia pada perangkat saat pemindaian.</span>
+                    ) : (
+                      <>Jarak terhitung: <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : 'Tidak tersedia'}</span> (Radius perimeter: {response.geofence_radius}m)</>
+                    )}
                   </div>
                 </div>
 

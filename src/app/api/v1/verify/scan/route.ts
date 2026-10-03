@@ -40,6 +40,27 @@ export async function POST(req: NextRequest) {
     const fuzzyThreshold = parseInt(process.env.FUZZY_WARNING_THRESHOLD || '50', 10);
 
     // ────────────────────────────────────────────────────────────────────────
+    // Pre-lookup Merchant to compute actual metadata & Fuzzy Match
+    // ────────────────────────────────────────────────────────────────────────
+    let initialMerchants = await getMerchantsByNmid(nmid);
+    let resolvedRegisteredName = scannedName;
+    let resolvedCity = 'BANDUNG';
+    let resolvedSecurityMode: any = 'DYNAMIC';
+    let resolvedZoneCategory: any = 'UMKM';
+    let resolvedRadius = defaultRadiusMeters;
+    let computedFuzzyScore = 100;
+
+    if (initialMerchants.length > 0) {
+      const pm = initialMerchants[0];
+      resolvedRegisteredName = pm.name;
+      resolvedCity = pm.city || 'BANDUNG';
+      resolvedSecurityMode = pm.security_mode || 'DYNAMIC';
+      resolvedZoneCategory = pm.zone_category || 'UMKM';
+      resolvedRadius = pm.radius_meters || defaultRadiusMeters;
+      computedFuzzyScore = fuzzyMatch(scannedName, pm.name).score;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
     // MANDATORY GPS GUARD:
     // Akses pembayaran QRIS WAJIB menyertakan koordinat GPS aktif!
     // Jika GPS tidak tersedia / dimatikan, transaksi langsung ditolak (HARD BLOCK).
@@ -49,11 +70,11 @@ export async function POST(req: NextRequest) {
 
       const incident = await logIncident({
         nmid_scanned: nmid,
-        merchant_name: scannedName || 'Unknown Merchant',
+        merchant_name: resolvedRegisteredName || scannedName || 'Unknown Merchant',
         status: 'BLOCKED',
         color: 'RED',
         reason: 'GPS_REQUIRED',
-        fuzzy_score: 0,
+        fuzzy_score: computedFuzzyScore,
         gps_available: false,
         raw_payload: rawPayload || undefined,
       });
@@ -64,20 +85,24 @@ export async function POST(req: NextRequest) {
         message: '🛑 Akses Ditolak: Pembayaran QRIS mewajibkan GPS aktif untuk memvalidasi lokasi fisik merchant demi perlindungan anti-fraud.',
         reason: 'GPS_REQUIRED',
         nmid,
-        nmid_valid: true,
-        matched_name: scannedName || 'Merchant QRIS',
-        merchant_city: 'BANDUNG',
+        nmid_valid: initialMerchants.length > 0,
+        matched_name: resolvedRegisteredName,
+        merchant_city: resolvedCity,
         location_check: 'SKIPPED',
         distance_meters: null,
         duration_seconds: 0,
         calculation_method: 'HAVERSINE',
-        geofence_radius: defaultRadiusMeters,
-        fuzzy_score: 0,
-        fuzzy_algorithm: 'gps_mandatory_gate',
+        geofence_radius: resolvedRadius,
+        fuzzy_score: computedFuzzyScore,
+        fuzzy_algorithm: 'levenshtein_hybrid',
         scanned_name: scannedName,
         auto_registered: false,
         gps_checked: false,
+        conflict_count: initialMerchants.length,
+        conflict_names: initialMerchants.map(m => ({ id: m.id, name: m.name })),
         incident_id: incident.id,
+        security_mode: resolvedSecurityMode,
+        zone_category: resolvedZoneCategory,
       };
 
       return NextResponse.json(response);

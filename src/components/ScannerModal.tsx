@@ -59,65 +59,81 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
   
+  // Real-time GPS reference to eliminate React stale closure in camera scan loops
+  const gpsLocationRef = useRef<{ lat: number; lon: number } | null>(null);
+  const gpsAccuracyRef = useRef<number | null>(null);
+
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastScanTimeRef = useRef<number>(0);
   const barcodeDetectorRef = useRef<any>(null);
 
+  const updateGpsCoords = useCallback((lat: number, lon: number, acc: number | null, statusStr?: string) => {
+    gpsLocationRef.current = { lat, lon };
+    gpsAccuracyRef.current = acc;
+    setGpsLocation({ lat, lon });
+    setGpsAccuracy(acc);
+    if (statusStr) setGpsStatus(statusStr);
+    setGpsState('GRANTED');
+  }, []);
+
+  const clearGpsCoords = useCallback((state: GpsGateState, statusStr: string) => {
+    gpsLocationRef.current = null;
+    gpsAccuracyRef.current = null;
+    setGpsLocation(null);
+    setGpsAccuracy(null);
+    setGpsState(state);
+    setGpsStatus(statusStr);
+  }, []);
+
   // ── Fungsi Request Izin & Kunci GPS ─────────────────────────────────
   const requestGpsPermission = useCallback(() => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      setGpsState('UNSUPPORTED');
-      setGpsStatus('Browser tidak mendukung Geolocation');
-      setGpsLocation(null);
-      setGpsAccuracy(null);
+      clearGpsCoords('UNSUPPORTED', 'Browser tidak mendukung Geolocation');
       return;
     }
 
     setGpsState('CHECKING');
     setGpsStatus('Mencari sinyal GPS satelit...');
 
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const acc = Math.round(pos.coords.accuracy);
-        setGpsLocation({ lat, lon });
-        setGpsAccuracy(acc);
-        setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-        setGpsState('GRANTED');
-      },
-      err => {
-        console.warn('GPS Request Error:', err);
-        if (err.code === 1) {
-          // PERMISSION_DENIED
-          setGpsState('DENIED');
-          setGpsStatus('Izin lokasi ditolak browser');
-        } else {
-          setGpsState('OFF');
-          setGpsStatus('Sinyal GPS mati atau tidak terdeteksi');
-        }
-        setGpsLocation(null);
-        setGpsAccuracy(null);
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-  }, []);
+    const tryGetPosition = (highAccuracy: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          const acc = Math.round(pos.coords.accuracy);
+          updateGpsCoords(lat, lon, acc, `${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+        },
+        err => {
+          if (highAccuracy) {
+            console.warn('High accuracy GPS timed out, trying network/cell location...');
+            tryGetPosition(false);
+            return;
+          }
+          console.warn('GPS Request Error:', err);
+          if (err.code === 1) {
+            clearGpsCoords('DENIED', 'Izin lokasi ditolak browser');
+          } else {
+            clearGpsCoords('OFF', 'Sinyal GPS mati atau tidak terdeteksi');
+          }
+        },
+        { enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 5000 : 8000, maximumAge: 15000 }
+      );
+    };
+
+    tryGetPosition(true);
+  }, [updateGpsCoords, clearGpsCoords]);
 
   // ── Preset Demo Lokasi (Untuk Evaluasi Desktop/Juri tanpa GPS Fisik) ─
   const activateDemoLocation = useCallback(() => {
     setUseRealGps(false);
-    setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
-    setGpsAccuracy(1);
-    setGpsStatus('Demo Telkom Univ (-6.974021, 107.630342)');
-    setGpsState('GRANTED');
-  }, []);
+    updateGpsCoords(SELARU_LAT, SELARU_LON, 1, 'Demo Telkom Univ (-6.974021, 107.630342)');
+  }, [updateGpsCoords]);
 
   // ── GPS Streaming Real-Time (watchPosition) ─────────────────────────
   useEffect(() => {
     if (!isOpen) {
-      setGpsState('CHECKING');
-      setGpsLocation(null);
+      clearGpsCoords('CHECKING', 'Menghubungkan GPS satelit...');
       return;
     }
 
@@ -131,36 +147,28 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
           const acc = Math.round(pos.coords.accuracy);
-
-          setGpsLocation({ lat, lon });
-          setGpsAccuracy(acc);
-          setGpsStatus(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-          setGpsState('GRANTED');
+          updateGpsCoords(lat, lon, acc, `${lat.toFixed(6)}, ${lon.toFixed(6)}`);
         },
         err => {
           console.warn('GPS Stream Watch Error:', err);
-          if (err.code === 1) {
-            setGpsState('DENIED');
-            setGpsStatus('Izin lokasi ditolak browser');
-          } else {
-            setGpsState('OFF');
-            setGpsStatus('Sinyal GPS mati');
+          // If we already have a locked GPS position, don't clear it on momentary signal jitter
+          if (!gpsLocationRef.current) {
+            if (err.code === 1) {
+              clearGpsCoords('DENIED', 'Izin lokasi ditolak browser');
+            } else {
+              clearGpsCoords('OFF', 'Sinyal GPS mati');
+            }
           }
-          setGpsLocation(null);
-          setGpsAccuracy(null);
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 0,
+          maximumAge: 10000,
           timeout: 10000,
         }
       );
     } else if (!useRealGps) {
-      if (!gpsLocation) {
-        setGpsLocation({ lat: SELARU_LAT, lon: SELARU_LON });
-        setGpsStatus('Gedung Selaru (-6.974021, 107.630342)');
-        setGpsAccuracy(1);
-        setGpsState('GRANTED');
+      if (!gpsLocationRef.current) {
+        updateGpsCoords(SELARU_LAT, SELARU_LON, 1, 'Gedung Selaru (-6.974021, 107.630342)');
       }
     }
 
@@ -169,7 +177,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [isOpen, useRealGps, requestGpsPermission]);
+  }, [isOpen, useRealGps, requestGpsPermission, updateGpsCoords, clearGpsCoords]);
 
   const stopCamera = useCallback(() => {
     if (animationFrameRef.current) {
@@ -413,6 +421,14 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
   // Handle scanned raw QR code data
   const handleRawQr = async (rawCode: string) => {
     if (isProcessing) return;
+
+    // Read real-time GPS from ref (fresh, immune to React closure staleness)
+    const currentGps = gpsLocationRef.current;
+    if (!currentGps || currentGps.lat == null || currentGps.lon == null) {
+      alert('Sinyal GPS belum terkunci! Pastikan GPS aktif dan terhubung sebelum memindai QRIS.');
+      return;
+    }
+
     setIsProcessing(true);
     stopCamera();
 
@@ -423,9 +439,9 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
         nmid: parsed.nmid,
         name: parsed.merchantName,
         rawPayload: rawCode,
-        latitude: gpsLocation?.lat,
-        longitude: gpsLocation?.lon,
-        accuracy: gpsAccuracy,
+        latitude: currentGps.lat,
+        longitude: currentGps.lon,
+        accuracy: gpsAccuracyRef.current,
       };
 
       const res = await fetch('/api/v1/verify/scan', {
@@ -449,7 +465,8 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (gpsState !== 'GRANTED' || !gpsLocation) {
+    const currentGps = gpsLocationRef.current;
+    if (!currentGps || currentGps.lat == null || currentGps.lon == null) {
       alert('Akses Ditolak: GPS wajib aktif untuk memverifikasi QRIS! Silakan nyalakan GPS atau gunakan lokasi demo terlebih dahulu.');
       return;
     }
@@ -778,10 +795,7 @@ export default function ScannerModal({ isOpen, onClose, onScanComplete }: Scanne
                 longitude={gpsLocation?.lon || SELARU_LON}
                 onChange={(lat, lon) => {
                   setUseRealGps(false);
-                  setGpsLocation({ lat, lon });
-                  setGpsAccuracy(1);
-                  setGpsStatus(`Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
-                  setGpsState('GRANTED');
+                  updateGpsCoords(lat, lon, 1, `Peta: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
                 }}
                 height="250px"
                 geofenceRadius={20}
