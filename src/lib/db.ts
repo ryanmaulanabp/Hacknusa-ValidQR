@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
-import { Merchant, IncidentLog } from './types';
+import { Merchant, IncidentLog, SecurityMode, ZoneCategory } from './types';
 import { INITIAL_MERCHANTS, INITIAL_INCIDENT_LOGS } from './mockData';
+import { haversineDistanceMeters } from './geofence';
 
 // Global database pool cache across hot-reloads in Next.js
 declare global {
@@ -61,11 +62,19 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
           latitude      DECIMAL(10, 7) NOT NULL,
           longitude     DECIMAL(10, 7) NOT NULL,
           wa_number     VARCHAR(20),
+          security_mode VARCHAR(30)    DEFAULT 'DYNAMIC',
+          zone_category VARCHAR(50)    DEFAULT 'UMKM',
+          radius_meters INTEGER        DEFAULT 20,
           is_active     BOOLEAN        DEFAULT TRUE,
           is_auto_registered BOOLEAN   DEFAULT FALSE,
           created_at    TIMESTAMPTZ    DEFAULT NOW(),
           updated_at    TIMESTAMPTZ    DEFAULT NOW()
         );
+
+        -- Add columns if existing table didn't have them
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS security_mode VARCHAR(30) DEFAULT 'DYNAMIC';
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS zone_category VARCHAR(50) DEFAULT 'UMKM';
+        ALTER TABLE merchants ADD COLUMN IF NOT EXISTS radius_meters INTEGER DEFAULT 20;
 
         CREATE TABLE IF NOT EXISTS incident_logs (
           id              SERIAL PRIMARY KEY,
@@ -89,9 +98,20 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
       if (parseInt(countRes.rows[0].count, 10) === 0) {
         for (const m of INITIAL_MERCHANTS) {
           await client.query(
-            `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, is_active)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [m.nmid, m.name, m.city || 'BANDUNG', m.latitude, m.longitude, m.wa_number, m.is_active]
+            `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, security_mode, zone_category, radius_meters, is_active)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              m.nmid,
+              m.name,
+              m.city || 'BANDUNG',
+              m.latitude,
+              m.longitude,
+              m.wa_number,
+              m.security_mode || 'DYNAMIC',
+              m.zone_category || 'UMKM',
+              m.radius_meters || 20,
+              m.is_active,
+            ]
           );
         }
       }
@@ -151,16 +171,23 @@ export async function createMerchant(data: {
   latitude: number;
   longitude: number;
   wa_number?: string | null;
+  security_mode?: SecurityMode;
+  zone_category?: ZoneCategory;
+  radius_meters?: number;
   is_auto_registered?: boolean;
 }): Promise<Merchant> {
   const city = data.city || 'BANDUNG';
+  const security_mode = data.security_mode || 'DYNAMIC';
+  const zone_category = data.zone_category || 'UMKM';
+  const radius_meters = data.radius_meters || (security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20);
+
   if (pool) {
     try {
       const res = await pool.query(
-        `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, is_active, is_auto_registered, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, NOW(), NOW())
+        `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, security_mode, zone_category, radius_meters, is_active, is_auto_registered, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, $10, NOW(), NOW())
          RETURNING *`,
-        [data.nmid, data.name, city, data.latitude, data.longitude, data.wa_number || null, !!data.is_auto_registered]
+        [data.nmid, data.name, city, data.latitude, data.longitude, data.wa_number || null, security_mode, zone_category, radius_meters, !!data.is_auto_registered]
       );
       return mapMerchantRow(res.rows[0]);
     } catch (err) {
@@ -177,6 +204,9 @@ export async function createMerchant(data: {
     latitude: Number(data.latitude),
     longitude: Number(data.longitude),
     wa_number: data.wa_number || null,
+    security_mode,
+    zone_category,
+    radius_meters,
     is_active: true,
     is_auto_registered: !!data.is_auto_registered,
     created_at: new Date().toISOString(),
@@ -209,11 +239,19 @@ export async function deleteMerchant(id: number): Promise<boolean> {
 }
 
 /**
- * Update merchant details (e.g. WhatsApp number)
+ * Update merchant details (e.g. WhatsApp number, mode, radius)
  */
 export async function updateMerchant(
   id: number,
-  data: { wa_number?: string | null; name?: string; latitude?: number; longitude?: number }
+  data: {
+    wa_number?: string | null;
+    name?: string;
+    latitude?: number;
+    longitude?: number;
+    security_mode?: SecurityMode;
+    zone_category?: ZoneCategory;
+    radius_meters?: number;
+  }
 ): Promise<Merchant | null> {
   if (pool) {
     try {
@@ -223,10 +261,13 @@ export async function updateMerchant(
              name = COALESCE($3, name),
              latitude = COALESCE($4, latitude),
              longitude = COALESCE($5, longitude),
+             security_mode = COALESCE($6, security_mode),
+             zone_category = COALESCE($7, zone_category),
+             radius_meters = COALESCE($8, radius_meters),
              updated_at = NOW()
          WHERE id = $1
          RETURNING *`,
-        [id, data.wa_number, data.name, data.latitude, data.longitude]
+        [id, data.wa_number, data.name, data.latitude, data.longitude, data.security_mode, data.zone_category, data.radius_meters]
       );
       if (res.rows.length > 0) return mapMerchantRow(res.rows[0]);
     } catch (err) {
@@ -241,6 +282,9 @@ export async function updateMerchant(
     if (data.name !== undefined) mem[idx].name = data.name;
     if (data.latitude !== undefined) mem[idx].latitude = data.latitude;
     if (data.longitude !== undefined) mem[idx].longitude = data.longitude;
+    if (data.security_mode !== undefined) mem[idx].security_mode = data.security_mode;
+    if (data.zone_category !== undefined) mem[idx].zone_category = data.zone_category;
+    if (data.radius_meters !== undefined) mem[idx].radius_meters = data.radius_meters;
     mem[idx].updated_at = new Date().toISOString();
     return mem[idx];
   }
@@ -334,9 +378,54 @@ function mapMerchantRow(row: any): Merchant {
     latitude: parseFloat(row.latitude),
     longitude: parseFloat(row.longitude),
     wa_number: row.wa_number,
+    security_mode: row.security_mode || 'DYNAMIC',
+    zone_category: row.zone_category || 'UMKM',
+    radius_meters: row.radius_meters != null ? parseInt(row.radius_meters, 10) : 20,
     is_active: row.is_active,
     is_auto_registered: row.is_auto_registered,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
   };
+}
+
+/**
+ * Check if user coordinates fall inside any active EXCLUSIVE_STATIC merchant zone,
+ * and whether the scanned NMID conflicts with that exclusive merchant.
+ */
+export async function checkExclusiveZoneCollision(
+  userLat: number | null | undefined,
+  userLon: number | null | undefined,
+  scannedNmid: string
+): Promise<{
+  hasCollision: boolean;
+  exclusiveMerchant?: Merchant;
+  distanceMeters?: number;
+}> {
+  if (userLat == null || userLon == null || isNaN(Number(userLat)) || isNaN(Number(userLon))) {
+    return { hasCollision: false };
+  }
+
+  const allMerchants = await getAllMerchants();
+  const exclusiveMerchants = allMerchants.filter(
+    m => m.is_active && m.security_mode === 'EXCLUSIVE_STATIC'
+  );
+
+  for (const em of exclusiveMerchants) {
+    const dist = haversineDistanceMeters(Number(userLat), Number(userLon), em.latitude, em.longitude);
+    const radius = em.radius_meters || 50;
+
+    if (dist <= radius) {
+      // User is physically inside the protected perimeter of an exclusive zone!
+      // If the scanned NMID is NOT this exclusive merchant, it is a rogue QR violation!
+      if (em.nmid !== scannedNmid) {
+        return {
+          hasCollision: true,
+          exclusiveMerchant: em,
+          distanceMeters: Math.round(dist),
+        };
+      }
+    }
+  }
+
+  return { hasCollision: false };
 }

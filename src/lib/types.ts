@@ -1,3 +1,6 @@
+export type SecurityMode = 'DYNAMIC' | 'EXCLUSIVE_STATIC';
+export type ZoneCategory = 'UMKM' | 'TEMPAT_IBADAH' | 'RUMAH_SAKIT' | 'INSTANSI' | 'LAINNYA';
+
 export interface Merchant {
   id: number;
   nmid: string;
@@ -6,6 +9,9 @@ export interface Merchant {
   latitude: number;
   longitude: number;
   wa_number?: string | null;
+  security_mode?: SecurityMode;
+  zone_category?: ZoneCategory;
+  radius_meters?: number;
   is_active: boolean;
   is_auto_registered?: boolean;
   created_at: string;
@@ -60,6 +66,10 @@ export interface ScanResponse {
   conflict_count?: number;
   conflict_names?: Array<{ id: number; name: string }>;
   incident_id?: number;
+  security_mode?: SecurityMode;
+  zone_category?: ZoneCategory;
+  exclusive_zone_detected?: boolean;
+  exclusive_merchant_name?: string;
 }
 
 export interface Transaction {

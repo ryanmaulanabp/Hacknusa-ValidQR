@@ -18,7 +18,7 @@ import {
 import Link from 'next/link';
 
 interface DesktopCompanionWidgetsProps {
-  onRunPreset: (preset: typeof DEMO_PRESETS.stickerA) => void;
+  onRunPreset: (preset: any) => void;
   onOpenScanner: () => void;
 }
 
@@ -166,6 +166,78 @@ export default function DesktopCompanionWidgets({
               </div>
             </div>
             <ArrowRight className="w-4 h-4 text-amber-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Preset E: Mode Statis Eksklusif - QR Resmi Masjid */}
+          <button
+            onClick={() => onRunPreset(DEMO_PRESETS.stickerMasjid)}
+            className="w-full p-3 rounded-2xl bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-500/40 text-left transition-all flex items-center justify-between group shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white group-hover:text-emerald-300 transition-colors flex items-center gap-1.5">
+                  <span>Stiker E: QR Resmi Masjid</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                    Mode Statis
+                  </span>
+                </div>
+                <div className="text-[10px] text-emerald-400/80 font-mono">
+                  Infaq Masjid · VERIFIED (Hijau)
+                </div>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-emerald-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Preset F: Rogue QR di Area Mode Statis (Penipuan Kotak Amal) */}
+          <button
+            onClick={() => onRunPreset(DEMO_PRESETS.stickerFakeKotakAmal)}
+            className="w-full p-3 rounded-2xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/50 text-left transition-all flex items-center justify-between group shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <ShieldBan className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white group-hover:text-rose-300 transition-colors flex items-center gap-1.5">
+                  <span>Stiker F: Penipuan Kotak Amal</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                    QR Liar
+                  </span>
+                </div>
+                <div className="text-[10px] text-rose-400 font-mono">
+                  Pelanggaran Zona Statis · BLOCKED (Merah)
+                </div>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-rose-400 opacity-60 group-hover:opacity-100 transition-opacity" />
+          </button>
+
+          {/* Preset G: Mode Dinamis Berdampingan (Food Court) */}
+          <button
+            onClick={() => onRunPreset(DEMO_PRESETS.stickerKantinBuJoko)}
+            className="w-full p-3 rounded-2xl bg-indigo-950/30 hover:bg-indigo-900/40 border border-indigo-500/30 text-left transition-all flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                <Store className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors flex items-center gap-1.5">
+                  <span>Stiker G: Pedagang Berdampingan</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                    Mode Dinamis
+                  </span>
+                </div>
+                <div className="text-[10px] text-indigo-400/80 font-mono">
+                  Food Court (3m dr Pak Budi) · VERIFIED
+                </div>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-indigo-400 opacity-60 group-hover:opacity-100 transition-opacity" />
           </button>
         </div>
       </div>

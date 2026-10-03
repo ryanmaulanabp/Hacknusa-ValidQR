@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Merchant } from '@/lib/types';
+import { Merchant, SecurityMode, ZoneCategory } from '@/lib/types';
 import { SELARU_LAT, SELARU_LON, JAKARTA_LAT, JAKARTA_LON } from '@/lib/mockData';
 import StickerModal from '@/components/StickerModal';
 import {
@@ -21,6 +21,8 @@ import {
   ShieldCheck,
   Lock,
   Send,
+  Building2,
+  ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -50,6 +52,9 @@ export default function MerchantPortalPage() {
   const [latitude, setLatitude] = useState(SELARU_LAT);
   const [longitude, setLongitude] = useState(SELARU_LON);
   const [waNumber, setWaNumber] = useState('');
+  const [securityMode, setSecurityMode] = useState<SecurityMode>('DYNAMIC');
+  const [zoneCategory, setZoneCategory] = useState<ZoneCategory>('UMKM');
+  const [radiusMeters, setRadiusMeters] = useState<number>(20);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUpdatingWa, setIsUpdatingWa] = useState(false);
 
@@ -165,6 +170,9 @@ export default function MerchantPortalPage() {
     setLatitude(Number(m.latitude));
     setLongitude(Number(m.longitude));
     setWaNumber(m.wa_number || '');
+    setSecurityMode(m.security_mode || 'DYNAMIC');
+    setZoneCategory(m.zone_category || 'UMKM');
+    setRadiusMeters(m.radius_meters || (m.security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20));
     // Scroll smoothly to map container
     mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -177,6 +185,9 @@ export default function MerchantPortalPage() {
     setLatitude(SELARU_LAT);
     setLongitude(SELARU_LON);
     setWaNumber('');
+    setSecurityMode('DYNAMIC');
+    setZoneCategory('UMKM');
+    setRadiusMeters(20);
   };
 
   const handleGenerateSticker = async (e: React.FormEvent) => {
@@ -195,6 +206,9 @@ export default function MerchantPortalPage() {
           latitude: Number(latitude),
           longitude: Number(longitude),
           wa_number: waNumber.trim() || null,
+          security_mode: securityMode,
+          zone_category: zoneCategory,
+          radius_meters: Number(radiusMeters),
         }),
       });
 
@@ -483,14 +497,177 @@ export default function MerchantPortalPage() {
               </div>
             </div>
 
+            {/* ── Mode Keamanan & Tipe Kawasan ── */}
+            <div className="p-4 rounded-2xl bg-[#141829] border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  <span className="font-bold text-white text-xs">Mode Keamanan QR &amp; Kebijakan Area</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">ValidQR Adaptive Zone Engine</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Option 1: Mode Dinamis */}
+                <div
+                  onClick={() => {
+                    if (viewingMerchant) return;
+                    setSecurityMode('DYNAMIC');
+                    setRadiusMeters(20);
+                    if (zoneCategory === 'TEMPAT_IBADAH' || zoneCategory === 'RUMAH_SAKIT') {
+                      setZoneCategory('UMKM');
+                    }
+                  }}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    securityMode === 'DYNAMIC'
+                      ? 'bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-500/10'
+                      : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
+                  } ${viewingMerchant ? 'cursor-default' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xs text-white">
+                      <Store className="w-4 h-4 text-emerald-400" />
+                      <span>Mode Dinamis (Pedagang / UMKM)</span>
+                    </div>
+                    <input
+                      type="radio"
+                      name="securityMode"
+                      checked={securityMode === 'DYNAMIC'}
+                      disabled={!!viewingMerchant}
+                      onChange={() => {}}
+                      className="text-emerald-500 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                    Cocok untuk food court, pasar, atau ruko berjejer. Memungkinkan banyak merchant resmi berdekatan tanpa saling memblokir transaksi satu sama lain.
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Radius Standar: ±20m
+                    </span>
+                    <span className="text-[10px] text-slate-400">Multi-QR Coexistence</span>
+                  </div>
+                </div>
+
+                {/* Option 2: Mode Statis Eksklusif */}
+                <div
+                  onClick={() => {
+                    if (viewingMerchant) return;
+                    setSecurityMode('EXCLUSIVE_STATIC');
+                    if (radiusMeters === 20) setRadiusMeters(60);
+                    if (zoneCategory === 'UMKM') setZoneCategory('TEMPAT_IBADAH');
+                  }}
+                  className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                    securityMode === 'EXCLUSIVE_STATIC'
+                      ? 'bg-amber-950/40 border-amber-500/60 shadow-lg shadow-amber-500/10'
+                      : 'bg-[#101424] border-white/5 opacity-70 hover:opacity-100 hover:border-white/20'
+                  } ${viewingMerchant ? 'cursor-default' : ''}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 font-bold text-xs text-white">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <span>Mode Statis Eksklusif (Proteksi Tunggal)</span>
+                    </div>
+                    <input
+                      type="radio"
+                      name="securityMode"
+                      checked={securityMode === 'EXCLUSIVE_STATIC'}
+                      disabled={!!viewingMerchant}
+                      onChange={() => {}}
+                      className="text-amber-500 focus:ring-amber-500"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1.5 leading-relaxed">
+                    <strong>Hanya 1 QR resmi</strong> yang boleh aktif di zona ini. Jika ada QR liar lain discan di radius ini, transaksi otomatis <strong>DIBLOKIR KERAS</strong> (Anti-fraud kotak amal masjid &amp; RS).
+                  </p>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Single-QR Lockdown
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-medium">Keamanan Ekstra</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kategori dan Kustomisasi Radius */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-white/5">
+                <div>
+                  <label className="block text-slate-300 mb-1.5 font-semibold text-xs">
+                    Kategori Kawasan
+                  </label>
+                  <select
+                    disabled={!!viewingMerchant}
+                    value={zoneCategory}
+                    onChange={e => {
+                      const val = e.target.value as ZoneCategory;
+                      setZoneCategory(val);
+                      if (val === 'TEMPAT_IBADAH' || val === 'RUMAH_SAKIT' || val === 'INSTANSI') {
+                        setSecurityMode('EXCLUSIVE_STATIC');
+                        if (radiusMeters < 50) setRadiusMeters(60);
+                      }
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-[#181B2F] border ${
+                      viewingMerchant
+                        ? 'border-white/5 text-slate-400 cursor-not-allowed opacity-80'
+                        : 'border-white/10 text-white focus:border-indigo-500'
+                    } text-xs focus:outline-none`}
+                  >
+                    <option value="UMKM">🏪 Pedagang / UMKM / Kuliner (Pasar/Food Court)</option>
+                    <option value="TEMPAT_IBADAH">🕌 Tempat Ibadah (Masjid / Gereja / Kotak Amal)</option>
+                    <option value="RUMAH_SAKIT">🏥 Fasilitas Kesehatan / Rumah Sakit / Kasir Darurat</option>
+                    <option value="INSTANSI">🏛️ Kantor Instansi / Layanan Publik Pemerintah</option>
+                    <option value="LAINNYA">🏢 Area Khusus Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-slate-300 font-semibold text-xs">
+                      Radius Perimeter Geofence
+                    </label>
+                    <span className="text-indigo-400 font-mono font-bold text-xs">±{radiusMeters} Meter</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="10"
+                      max="150"
+                      step="5"
+                      disabled={!!viewingMerchant}
+                      value={radiusMeters}
+                      onChange={e => setRadiusMeters(parseInt(e.target.value, 10))}
+                      className="flex-1 accent-indigo-500 cursor-pointer disabled:opacity-50"
+                    />
+                    <div className="flex gap-1 shrink-0">
+                      {[20, 50, 60, 100].map(r => (
+                        <button
+                          key={r}
+                          type="button"
+                          disabled={!!viewingMerchant}
+                          onClick={() => setRadiusMeters(r)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                            radiusMeters === r
+                              ? 'bg-indigo-600 text-white border-indigo-500'
+                              : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                          } disabled:opacity-50`}
+                        >
+                          {r}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ── Leaflet Interactive Map Picker ── */}
             <div className="space-y-2 pt-2">
               <label className="block text-slate-300 font-bold flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <MapPin className="w-4 h-4 text-emerald-400" />
                   {viewingMerchant
-                    ? `Lokasi GPS Terdaftar (Geofence 20m • Read-Only)`
-                    : `Pilih Lokasi Merchant pada Peta (Leaflet Geofence 20m)`}
+                    ? `Lokasi GPS Terdaftar (Perimeter ±${radiusMeters}m • Read-Only)`
+                    : `Pilih Titik Lokasi Merchant pada Peta (Radius Proteksi ±${radiusMeters}m)`}
                 </span>
                 {viewingMerchant && (
                   <span className="text-[10px] text-emerald-300 font-normal flex items-center gap-1">
@@ -508,7 +685,7 @@ export default function MerchantPortalPage() {
                   setLongitude(lon);
                 }}
                 height="320px"
-                geofenceRadius={20}
+                geofenceRadius={radiusMeters}
                 merchantName={name || 'Merchant'}
                 readOnly={!!viewingMerchant}
                 hideOverlays={!!selectedStickerMerchant}
@@ -618,6 +795,7 @@ export default function MerchantPortalPage() {
                   <th className="py-2.5 px-3">ID</th>
                   <th className="py-2.5 px-3">NMID</th>
                   <th className="py-2.5 px-3">Nama Merchant</th>
+                  <th className="py-2.5 px-3">Mode &amp; Zona</th>
                   <th className="py-2.5 px-3">WhatsApp Alert</th>
                   <th className="py-2.5 px-3">Kota</th>
                   <th className="py-2.5 px-3">Koordinat (Lat, Lon)</th>
@@ -660,6 +838,35 @@ export default function MerchantPortalPage() {
                         </div>
                       </td>
                       <td className="py-3 px-3">
+                        {m.security_mode === 'EXCLUSIVE_STATIC' ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 w-fit shadow-sm">
+                              <Lock className="w-3 h-3 text-amber-400" />
+                              <span>Statis Eksklusif</span>
+                            </span>
+                            <span className="block text-[9px] text-amber-400/80 font-medium">
+                              {m.zone_category === 'TEMPAT_IBADAH'
+                                ? 'Tempat Ibadah'
+                                : m.zone_category === 'RUMAH_SAKIT'
+                                ? 'Rumah Sakit'
+                                : m.zone_category === 'INSTANSI'
+                                ? 'Instansi'
+                                : 'Area Khusus'}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
+                              <Store className="w-3 h-3 text-emerald-400" />
+                              <span>Dinamis</span>
+                            </span>
+                            <span className="block text-[9px] text-slate-400">
+                              Pedagang / UMKM
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
                         {m.wa_number ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-fit">
                             <span>{m.wa_number}</span>
@@ -673,9 +880,13 @@ export default function MerchantPortalPage() {
                         {Number(m.latitude).toFixed(5)}, {Number(m.longitude).toFixed(5)}
                       </td>
                       <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 w-fit">
-                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                          <span>±20m</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 w-fit ${
+                          m.security_mode === 'EXCLUSIVE_STATIC'
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        }`}>
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>±{m.radius_meters || 20}m</span>
                         </span>
                       </td>
                       <td className="py-3 px-3 text-right">

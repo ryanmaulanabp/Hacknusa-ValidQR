@@ -17,6 +17,8 @@ import {
   Send,
   ArrowRight,
   X,
+  Lock,
+  Store,
 } from 'lucide-react';
 
 interface VerificationPopupProps {
@@ -39,7 +41,9 @@ export default function VerificationPopup({
 
   if (!isOpen || !response) return null;
 
+  const isExclusiveViolation = response.reason === 'EXCLUSIVE_ZONE_VIOLATION';
   const isBlocked =
+    isExclusiveViolation ||
     response.status === 'BLOCKED' ||
     response.status === 'HARD_BLOCK' ||
     response.color.toUpperCase() === 'RED' ||
@@ -49,6 +53,7 @@ export default function VerificationPopup({
   const isFuzzyWarn = response.fuzzy_score < 100;
   const isWarning = !isBlocked && (response.status === 'REBRAND_WARNING' || response.status === 'SOFT_WARNING' || isGpsSkipped);
   const isVerified = !isBlocked && !isWarning;
+  const isExclusiveVerified = isVerified && response.security_mode === 'EXCLUSIVE_STATIC';
 
   // Visual Theme Configuration
   const theme = isBlocked
@@ -60,9 +65,17 @@ export default function VerificationPopup({
         accentBtn: 'bg-rose-600 hover:bg-rose-700 text-white',
         iconBg: 'bg-rose-500/20 text-rose-500',
         badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
-        kicker: t('kicker_blocked'),
-        title: !response.nmid_valid ? t('title_unregistered') : t('title_blocked'),
-        subtitle: !response.nmid_valid ? t('sub_unregistered') : t('sub_blocked_overlay'),
+        kicker: isExclusiveViolation ? '🚨 PELANGGARAN ZONA STATIS' : t('kicker_blocked'),
+        title: isExclusiveViolation
+          ? 'TRANSAKSI DIBLOKIR: QR LIAR'
+          : !response.nmid_valid
+          ? t('title_unregistered')
+          : t('title_blocked'),
+        subtitle: isExclusiveViolation
+          ? `Area ini adalah Zona Statis Eksklusif (${response.matched_name || 'Tempat Ibadah/RS'}). Hanya 1 QR resmi yang diizinkan di perimeter ini!`
+          : !response.nmid_valid
+          ? t('sub_unregistered')
+          : t('sub_blocked_overlay'),
         icon: ShieldBan,
       }
     : isWarning
@@ -88,16 +101,22 @@ export default function VerificationPopup({
         icon: AlertTriangle,
       }
     : {
-        bg: 'bg-[#091A0E]',
-        cardBg: 'bg-[#102B19]',
-        border: 'border-emerald-600/40',
-        textPrimary: 'text-emerald-400',
-        accentBtn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-        iconBg: 'bg-emerald-500/20 text-emerald-400',
-        badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-        kicker: t('kicker_verified'),
-        title: t('title_verified'),
-        subtitle: t('sub_verified'),
+        bg: isExclusiveVerified ? 'bg-[#061814]' : 'bg-[#091A0E]',
+        cardBg: isExclusiveVerified ? 'bg-[#0B251F]' : 'bg-[#102B19]',
+        border: isExclusiveVerified ? 'border-teal-500/50' : 'border-emerald-600/40',
+        textPrimary: isExclusiveVerified ? 'text-teal-300' : 'text-emerald-400',
+        accentBtn: isExclusiveVerified
+          ? 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:opacity-90 text-white'
+          : 'bg-emerald-600 hover:bg-emerald-700 text-white',
+        iconBg: isExclusiveVerified ? 'bg-teal-500/20 text-teal-300' : 'bg-emerald-500/20 text-emerald-400',
+        badgeBg: isExclusiveVerified
+          ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        kicker: isExclusiveVerified ? '🛡️ ZONA STATIS EKSKLUSIF TERPROTEKSI' : t('kicker_verified'),
+        title: isExclusiveVerified ? 'MERCHANT RESMI TERKUNCI' : t('title_verified'),
+        subtitle: isExclusiveVerified
+          ? 'Single-QR Lockdown aktif. QR resmi terverifikasi dan dilindungi dari stiker liar.'
+          : t('sub_verified'),
         icon: ShieldCheck,
       };
 
@@ -257,7 +276,7 @@ export default function VerificationPopup({
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      Layer 3: GPS Geofencing (20m)
+                      Layer 3: GPS Geofencing (±{response.geofence_radius}m)
                     </span>
                     {response.location_check === 'MATCH' ? (
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
@@ -274,7 +293,31 @@ export default function VerificationPopup({
                     )}
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    Jarak terhitung: <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : 'Tidak tersedia'}</span> (Radius aman: {response.geofence_radius}m)
+                    Jarak terhitung: <span className="font-bold text-white">{response.distance_meters !== null ? `${response.distance_meters} m` : 'Tidak tersedia'}</span> (Radius perimeter: {response.geofence_radius}m)
+                  </div>
+                </div>
+
+                {/* Layer 0 / Security Mode Policy */}
+                <div className="p-2.5 rounded-xl bg-white/5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      Kebijakan Area &amp; Mode Keamanan
+                    </span>
+                    {response.security_mode === 'EXCLUSIVE_STATIC' ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        🛡️ Statis Eksklusif
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        🏪 Dinamis UMKM
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-400 leading-snug">
+                    {response.security_mode === 'EXCLUSIVE_STATIC'
+                      ? `Single-QR Lockdown aktif (Radius ±${response.geofence_radius}m). Hanya QR resmi ${response.matched_name || ''} yang diizinkan beroperasi di lokasi ini.`
+                      : `Multi-QR Coexistence (Radius ±${response.geofence_radius}m). Pedagang resmi berdekatan aman bertransaksi tanpa saling memblokir.`}
                   </div>
                 </div>
               </div>

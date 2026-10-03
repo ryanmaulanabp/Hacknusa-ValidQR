@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
       nmid = `ID${Math.floor(Math.random() * 10000000000).toString().padStart(10, '0')}`;
     }
 
+    const security_mode = body.security_mode || 'DYNAMIC';
+    const zone_category = body.zone_category || 'UMKM';
+    const radius_meters = body.radius_meters ? parseInt(body.radius_meters, 10) : (security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20);
+
     const merchant = await createMerchant({
       nmid,
       name,
@@ -30,6 +34,9 @@ export async function POST(req: NextRequest) {
       latitude,
       longitude,
       wa_number: body.wa_number || null,
+      security_mode,
+      zone_category,
+      radius_meters,
     });
 
     const payload = buildDemoPayload(nmid, name, city);

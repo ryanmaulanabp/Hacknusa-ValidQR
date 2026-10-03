@@ -83,14 +83,16 @@ function MainAppContent() {
   };
 
   // Run a quick preset directly from the desktop companion widget
-  const handleRunPreset = async (preset: typeof DEMO_PRESETS.stickerA) => {
+  const handleRunPreset = async (preset: any) => {
     try {
+      const userLat = preset.userLat ?? SELARU_LAT;
+      const userLon = preset.userLon ?? SELARU_LON;
       const payloadToSend = {
         nmid: preset.nmid,
         name: preset.merchantName,
         rawPayload: preset.rawPayload,
-        latitude: SELARU_LAT,
-        longitude: SELARU_LON,
+        latitude: userLat,
+        longitude: userLon,
       };
 
       const res = await fetch('/api/v1/verify/scan', {

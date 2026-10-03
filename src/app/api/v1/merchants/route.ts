@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
       latitude,
       longitude,
       wa_number: body.wa_number || null,
+      security_mode: body.security_mode || 'DYNAMIC',
+      zone_category: body.zone_category || 'UMKM',
+      radius_meters: body.radius_meters ? parseInt(body.radius_meters, 10) : undefined,
     });
 
     return NextResponse.json({
