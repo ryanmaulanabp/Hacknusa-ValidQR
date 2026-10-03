@@ -125,11 +125,23 @@ export async function initDatabase(): Promise<{ mode: 'cloud' | 'in_memory'; mes
   }
 }
 
+let schemaEnsured = false;
+export async function ensureSchema(): Promise<void> {
+  if (schemaEnsured || !pool) return;
+  try {
+    await initDatabase();
+    schemaEnsured = true;
+  } catch (err) {
+    console.warn('[DB] Auto schema init check error:', err);
+  }
+}
+
 /**
  * Get merchants by NMID
  */
 export async function getMerchantsByNmid(nmid: string): Promise<Merchant[]> {
   if (pool) {
+    await ensureSchema();
     try {
       const res = await pool.query(
         'SELECT * FROM merchants WHERE nmid = $1 AND is_active = TRUE ORDER BY created_at ASC',
@@ -150,6 +162,7 @@ export async function getMerchantsByNmid(nmid: string): Promise<Merchant[]> {
  */
 export async function getAllMerchants(): Promise<Merchant[]> {
   if (pool) {
+    await ensureSchema();
     try {
       const res = await pool.query('SELECT * FROM merchants ORDER BY id DESC');
       return res.rows.map(mapMerchantRow);
@@ -182,6 +195,7 @@ export async function createMerchant(data: {
   const radius_meters = data.radius_meters || (security_mode === 'EXCLUSIVE_STATIC' ? 60 : 20);
 
   if (pool) {
+    await ensureSchema();
     try {
       const res = await pool.query(
         `INSERT INTO merchants (nmid, name, city, latitude, longitude, wa_number, security_mode, zone_category, radius_meters, is_active, is_auto_registered, created_at, updated_at)
@@ -190,8 +204,9 @@ export async function createMerchant(data: {
         [data.nmid, data.name, city, data.latitude, data.longitude, data.wa_number || null, security_mode, zone_category, radius_meters, !!data.is_auto_registered]
       );
       return mapMerchantRow(res.rows[0]);
-    } catch (err) {
-      console.error('[DB Insert Error, using memory fallback]:', err);
+    } catch (err: any) {
+      console.error('[DB Insert Error]:', err);
+      throw new Error(`Gagal menyimpan merchant ke database: ${err.message}`);
     }
   }
 
